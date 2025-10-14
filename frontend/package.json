@@ -15,8 +15,10 @@
     "axios": "^1.12.2",
     "framer-motion": "^12.23.24",
     "lucide-react": "^0.545.0",
+    "photo-sphere-viewer": "^4.8.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-photo-sphere-viewer": "^6.2.3",
     "react-router-dom": "^7.9.4"
   },
   "devDependencies": {

@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
+// UI FIX: Imported useNavigate to make the back button functional.
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MapPin,
   Calendar,
-  Heart,
   Camera,
   Utensils,
   Sunrise,
-  Sun,
   Sunset,
   Moon,
   ChevronRight,
@@ -20,6 +20,9 @@ import {
   Share2,
 } from "lucide-react";
 
+// ICONS: Replaced some unused icons with ones relevant to the new itinerary
+import { Building2, Castle } from "lucide-react";
+
 const ItineraryCreationPage = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [destination, setDestination] = useState("");
@@ -28,6 +31,8 @@ const ItineraryCreationPage = () => {
   const [interests, setInterests] = useState([]);
   const [pace, setPace] = useState("moderate");
   const [generatedItinerary, setGeneratedItinerary] = useState(null);
+  // UI FIX: Added navigate hook instance.
+  const navigate = useNavigate();
 
   const interestOptions = [
     { id: "culture", label: "Culture & History", icon: "🏛️" },
@@ -40,125 +45,126 @@ const ItineraryCreationPage = () => {
     { id: "photography", label: "Photography", icon: "📸" },
   ];
 
+  // --- CONTENT CHANGE: Replaced Bali itinerary with a 3-day Golden Triangle trip. ---
   const exampleItinerary = {
-    destination: "Bali, Indonesia",
+    destination: "Golden Triangle, India",
     duration: "3 Days",
     days: [
       {
         day: 1,
-        title: "Arrival & Ubud Exploration",
+        title: "The Pink City of Jaipur",
         activities: [
           {
             time: "09:00 AM",
-            title: "Tegallalang Rice Terraces",
+            title: "Amber Fort (Amer Fort)",
             description:
-              "Start your Bali adventure with the iconic emerald rice terraces. Perfect for photography and experiencing traditional Balinese agriculture.",
-            duration: "2 hours",
+              "Begin your journey at this magnificent honey-hued fort. Explore its sprawling complex of palaces, halls, and gardens with breathtaking views.",
+            duration: "3 hours",
             image:
-              "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400&q=80",
-            icon: <Camera className="w-5 h-5" />,
+              "https://images.unsplash.com/photo-1599661046289-e31897846e41?w=400&q=80",
+            icon: <Castle className="w-5 h-5" />,
           },
           {
-            time: "12:30 PM",
-            title: "Lunch at Sari Organik",
+            time: "01:00 PM",
+            title: "Lunch at a Traditional Haveli",
             description:
-              "Organic farm-to-table dining overlooking the rice fields. Try the nasi campur and fresh coconut water.",
+              "Savor an authentic Rajasthani thali, featuring a variety of local vegetarian dishes like Dal Baati Churma in a heritage setting.",
             duration: "1.5 hours",
             image:
-              "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&q=80",
+              "https://images.unsplash.com/photo-1626781423101-e403816a1b83?w=400&q=80",
             icon: <Utensils className="w-5 h-5" />,
           },
           {
             time: "03:00 PM",
-            title: "Sacred Monkey Forest",
+            title: "City Palace & Hawa Mahal",
             description:
-              "Explore the lush sanctuary home to over 700 Balinese long-tailed monkeys and ancient temple ruins.",
-            duration: "2 hours",
+              "Explore the residence of the Jaipur royal family at the City Palace, then capture photos of the iconic 'Palace of Winds' (Hawa Mahal).",
+            duration: "2.5 hours",
             image:
-              "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&q=80",
-            icon: <Heart className="w-5 h-5" />,
+              "https://images.unsplash.com/photo-1617592344351-a51d95b57f20?w=400&q=80",
+            icon: <Camera className="w-5 h-5" />,
           },
           {
-            time: "07:00 PM",
-            title: "Traditional Balinese Dinner",
+            time: "07:30 PM",
+            title: "Dinner at Chokhi Dhani",
             description:
-              "Experience authentic Balinese cuisine at Locavore, featuring modern interpretations of local ingredients.",
-            duration: "2 hours",
+              "Experience a cultural evening at this ethnic village resort, with folk dances, music, and a traditional Rajasthani dinner.",
+            duration: "3 hours",
             image:
-              "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400&q=80",
+              "https://images.unsplash.com/photo-1601050690594-7069196b8633?w=400&q=80",
             icon: <Moon className="w-5 h-5" />,
           },
         ],
       },
       {
         day: 2,
-        title: "Temples & Beach Sunset",
+        title: "Jaipur to Agra via Fatehpur Sikri",
         activities: [
           {
-            time: "06:00 AM",
-            title: "Sunrise at Mount Batur",
+            time: "08:30 AM",
+            title: "Journey to Agra",
             description:
-              "Early morning trek to witness a spectacular sunrise above the clouds. Includes breakfast at the summit.",
+              "Enjoy a scenic drive towards Agra. En route, stop at the ghost city of Fatehpur Sikri, a UNESCO World Heritage site.",
             duration: "5 hours",
             image:
-              "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80",
-            icon: <Sunrise className="w-5 h-5" />,
+              "https://images.unsplash.com/photo-1603598583921-828b1b0a8f8d?w=400&q=80",
+            icon: <Building2 className="w-5 h-5" />,
           },
           {
-            time: "01:00 PM",
-            title: "Tirta Empul Temple",
+            time: "02:00 PM",
+            title: "Lunch in Agra",
             description:
-              "Participate in the sacred water purification ritual at this ancient Hindu temple with natural spring water.",
-            duration: "2 hours",
+              "After checking into your hotel, enjoy a hearty Mughlai lunch, famous for its rich and aromatic curries.",
+            duration: "1.5 hours",
             image:
-              "https://images.unsplash.com/photo-1555400038-63f5ba517a47?w=400&q=80",
-            icon: <MapPin className="w-5 h-5" />,
+              "https://images.unsplash.com/photo-1567188041724-4455f75a3a5f?w=400&q=80",
+            icon: <Utensils className="w-5 h-5" />,
           },
           {
             time: "05:00 PM",
-            title: "Tanah Lot Sunset",
+            title: "Sunset View from Mehtab Bagh",
             description:
-              "Visit the iconic sea temple perched on a rock formation. Arrive early for the best sunset views.",
-            duration: "2 hours",
+              "Witness a breathtaking sunset with the Taj Mahal in the background from across the Yamuna River at Mehtab Bagh (Moonlight Garden).",
+            duration: "1.5 hours",
             image:
-              "https://images.unsplash.com/photo-1537953773345-d172ccf13cf1?w=400&q=80",
+              "https://images.unsplash.com/photo-1524492412937-b28074a5d7da?w=400&q=80",
             icon: <Sunset className="w-5 h-5" />,
           },
         ],
       },
       {
         day: 3,
-        title: "Beach Day & Departure",
+        title: "The Iconic Taj Mahal",
         activities: [
           {
-            time: "09:00 AM",
-            title: "Seminyak Beach Relaxation",
+            time: "06:00 AM",
+            title: "Sunrise at the Taj Mahal",
             description:
-              "Enjoy your final morning on the pristine beaches of Seminyak. Perfect for swimming and sunbathing.",
+              "Experience the magical moment of sunrise at the world's most beautiful monument. See the white marble change colors with the rising sun.",
             duration: "3 hours",
             image:
-              "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400&q=80",
-            icon: <Sun className="w-5 h-5" />,
+              "https://images.unsplash.com/photo-1564507592333-c60657eea523?w=400&q=80",
+            icon: <Sunrise className="w-5 h-5" />,
           },
           {
-            time: "12:30 PM",
-            title: "Beachfront Lunch at Motel Mexicola",
+            time: "10:00 AM",
+            title: "Explore Agra Fort",
             description:
-              "Colorful Mexican restaurant with vibrant decor and delicious tacos. A perfect goodbye to Bali.",
-            duration: "1.5 hours",
-            image:
-              "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400&q=80",
-            icon: <Utensils className="w-5 h-5" />,
-          },
-          {
-            time: "03:00 PM",
-            title: "Last Minute Shopping",
-            description:
-              "Browse local boutiques and art galleries in Seminyak for unique souvenirs and handcrafted items.",
+              "Visit this historical red sandstone fort, which served as the main residence of the Mughal Emperors. Another UNESCO World Heritage site.",
             duration: "2 hours",
             image:
-              "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=400&q=80",
-            icon: <Camera className="w-5 h-5" />,
+              "https://images.unsplash.com/photo-1627895439839-86ce378c18c1?w=400&q=80",
+            icon: <Castle className="w-5 h-5" />,
+          },
+          {
+            time: "01:00 PM",
+            title: "Farewell Lunch & Departure",
+            description:
+              "Enjoy one last taste of Mughlai cuisine before heading for your journey back home, filled with unforgettable memories.",
+            duration: "1.5 hours",
+            image:
+              "https://images.unsplash.com/photo-1606491048802-8342506d84b2?w=400&q=80",
+            icon: <Utensils className="w-5 h-5" />,
           },
         ],
       },
@@ -174,6 +180,8 @@ const ItineraryCreationPage = () => {
   };
 
   const generateItinerary = () => {
+    // In a real app, you would send the form data to an AI service here.
+    // For this demo, we'll just use the example itinerary.
     setGeneratedItinerary(exampleItinerary);
     setCurrentStep(3);
   };
@@ -188,22 +196,27 @@ const ItineraryCreationPage = () => {
     setGeneratedItinerary(null);
   };
 
-  const progress = (currentStep / 3) * 100;
+  const steps = ["Destination", "Preferences", "Itinerary"];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      {/* Navbar */}
       <nav className="fixed top-0 w-full bg-white/80 backdrop-blur-md z-50 border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg"></div>
+            <button
+              onClick={() => navigate("/")}
+              className="flex items-center space-x-2 group"
+            >
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg transform group-hover:scale-110 transition-transform"></div>
               <span className="text-xl font-semibold text-slate-800">
                 Wanderly
               </span>
-            </div>
+            </button>
             <div className="flex items-center space-x-4">
-              <button className="text-slate-600 hover:text-slate-900 transition">
+              <button
+                onClick={() => navigate("/")}
+                className="text-slate-600 hover:text-slate-900 transition font-medium"
+              >
                 Back to Home
               </button>
             </div>
@@ -211,10 +224,8 @@ const ItineraryCreationPage = () => {
         </div>
       </nav>
 
-      {/* Main Content */}
       <div className="pt-24 pb-16 px-4">
         <div className="max-w-5xl mx-auto">
-          {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -229,27 +240,37 @@ const ItineraryCreationPage = () => {
             </p>
           </motion.div>
 
-          {/* Progress Bar */}
-          <div className="mb-12">
-            <div className="flex justify-between mb-2">
-              <span className="text-sm font-medium text-slate-700">
-                Step {currentStep} of 3
-              </span>
-              <span className="text-sm font-medium text-slate-700">
-                {Math.round(progress)}%
-              </span>
+          {/* UI FIX: Replaced simple progress bar with a visual step indicator */}
+          {currentStep < 3 && (
+            <div className="mb-12">
+              <div className="flex items-center justify-between max-w-md mx-auto">
+                {steps.map((step, index) => (
+                  <div key={index} className="flex items-center z-10">
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg transition-all duration-300 ${
+                        currentStep > index
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-200 text-slate-500"
+                      }`}
+                    >
+                      {currentStep > index ? <Check /> : index + 1}
+                    </div>
+                    {index < steps.length - 1 && (
+                      <div
+                        className={`flex-auto border-t-4 transition-all duration-300 ${
+                          currentStep > index + 1
+                            ? "border-blue-600"
+                            : "border-slate-200"
+                        }`}
+                        style={{ width: "120px" }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
-              <motion.div
-                className="h-full bg-gradient-to-r from-blue-500 to-purple-600"
-                initial={{ width: 0 }}
-                animate={{ width: `${progress}%` }}
-                transition={{ duration: 0.5 }}
-              />
-            </div>
-          </div>
+          )}
 
-          {/* Step Content */}
           <AnimatePresence mode="wait">
             {currentStep === 1 && (
               <motion.div
@@ -275,7 +296,7 @@ const ItineraryCreationPage = () => {
                         type="text"
                         value={destination}
                         onChange={(e) => setDestination(e.target.value)}
-                        placeholder="e.g., Bali, Tokyo, Paris, New York"
+                        placeholder="e.g., Jaipur, Goa, Kerala"
                         className="w-full pl-12 pr-4 py-4 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition"
                       />
                     </div>
@@ -292,7 +313,8 @@ const ItineraryCreationPage = () => {
                           type="date"
                           value={startDate}
                           onChange={(e) => setStartDate(e.target.value)}
-                          className="w-full pl-12 pr-4 py-4 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition"
+                          // UI FIX: Added classes to ensure date text is visible over icon
+                          className="w-full pl-12 pr-4 py-4 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition relative z-10 bg-transparent"
                         />
                       </div>
                     </div>
@@ -307,7 +329,8 @@ const ItineraryCreationPage = () => {
                           type="date"
                           value={endDate}
                           onChange={(e) => setEndDate(e.target.value)}
-                          className="w-full pl-12 pr-4 py-4 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition"
+                          // UI FIX: Added classes to ensure date text is visible over icon
+                          className="w-full pl-12 pr-4 py-4 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition relative z-10 bg-transparent"
                         />
                       </div>
                     </div>
@@ -341,7 +364,6 @@ const ItineraryCreationPage = () => {
                 <h2 className="text-2xl font-bold text-slate-900 mb-6">
                   What are your interests?
                 </h2>
-
                 <div className="space-y-8">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-4">
@@ -354,7 +376,7 @@ const ItineraryCreationPage = () => {
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                           onClick={() => toggleInterest(interest.id)}
-                          className={`p-4 rounded-xl border-2 transition ${
+                          className={`p-4 rounded-xl border-2 transition text-center ${
                             interests.includes(interest.id)
                               ? "border-blue-500 bg-blue-50"
                               : "border-slate-200 hover:border-slate-300"
@@ -383,7 +405,7 @@ const ItineraryCreationPage = () => {
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                           onClick={() => setPace(paceOption)}
-                          className={`p-6 rounded-xl border-2 transition ${
+                          className={`p-6 rounded-xl border-2 transition text-center ${
                             pace === paceOption
                               ? "border-blue-500 bg-blue-50"
                               : "border-slate-200 hover:border-slate-300"
@@ -436,15 +458,13 @@ const ItineraryCreationPage = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
               >
-                {/* Itinerary Header */}
                 <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl p-8 md:p-12 text-white mb-8">
                   <h2 className="text-3xl font-bold mb-2">
-                    {generatedItinerary.destination}
+                    Your Itinerary: {generatedItinerary.destination}
                   </h2>
                   <p className="text-lg opacity-90">
-                    {generatedItinerary.duration} Adventure
+                    A {generatedItinerary.duration} Adventure
                   </p>
-
                   <div className="mt-6 flex flex-wrap gap-4">
                     <motion.button
                       whileHover={{ scale: 1.05 }}
@@ -453,14 +473,6 @@ const ItineraryCreationPage = () => {
                     >
                       <Download className="w-5 h-5" />
                       <span>Save Itinerary</span>
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="px-6 py-3 bg-white/20 backdrop-blur-sm text-white rounded-xl font-semibold hover:bg-white/30 transition flex items-center space-x-2"
-                    >
-                      <Share2 className="w-5 h-5" />
-                      <span>Share</span>
                     </motion.button>
                     <motion.button
                       whileHover={{ scale: 1.05 }}
@@ -474,7 +486,6 @@ const ItineraryCreationPage = () => {
                   </div>
                 </div>
 
-                {/* Daily Itineraries */}
                 <div className="space-y-8">
                   {generatedItinerary.days.map((day, dayIndex) => (
                     <motion.div
@@ -485,62 +496,55 @@ const ItineraryCreationPage = () => {
                       className="bg-white rounded-2xl shadow-lg overflow-hidden"
                     >
                       <div className="bg-gradient-to-r from-slate-100 to-slate-50 px-8 py-6 border-b border-slate-200">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-sm font-semibold text-blue-600 uppercase tracking-wide">
-                              Day {day.day}
-                            </span>
-                            <h3 className="text-2xl font-bold text-slate-900 mt-1">
-                              {day.title}
-                            </h3>
-                          </div>
-                        </div>
+                        <h3 className="text-sm font-semibold text-blue-600 uppercase tracking-wide">
+                          Day {day.day}
+                        </h3>
+                        <p className="text-2xl font-bold text-slate-900 mt-1">
+                          {day.title}
+                        </p>
                       </div>
 
-                      <div className="p-8">
-                        <div className="space-y-6">
+                      {/* UI FIX: Added a container for the timeline effect */}
+                      <div className="p-4 md:p-8">
+                        <div className="relative">
+                          {/* The timeline line */}
+                          <div className="absolute left-8 top-4 bottom-4 w-0.5 bg-slate-200"></div>
+
                           {day.activities.map((activity, actIndex) => (
                             <motion.div
                               key={actIndex}
+                              className="relative pl-16 py-4"
                               initial={{ opacity: 0, x: -20 }}
                               animate={{ opacity: 1, x: 0 }}
                               transition={{
                                 duration: 0.3,
                                 delay: actIndex * 0.05,
                               }}
-                              className="flex gap-6"
                             >
-                              <div className="flex-shrink-0">
-                                <div className="w-24 text-center">
-                                  <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-full mb-2">
-                                    {activity.icon}
-                                  </div>
-                                  <div className="text-sm font-semibold text-slate-700">
-                                    {activity.time}
-                                  </div>
-                                  <div className="text-xs text-slate-500 mt-1">
-                                    {activity.duration}
-                                  </div>
-                                </div>
+                              {/* Timeline circle icon */}
+                              <div className="absolute left-8 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-full flex items-center justify-center ring-8 ring-white">
+                                {activity.icon}
                               </div>
 
-                              <div className="flex-1">
-                                <div className="flex gap-4">
-                                  <div className="flex-1">
-                                    <h4 className="text-lg font-bold text-slate-900 mb-2">
-                                      {activity.title}
-                                    </h4>
-                                    <p className="text-slate-600 leading-relaxed">
-                                      {activity.description}
-                                    </p>
+                              {/* UI FIX: Improved responsive layout for activities */}
+                              <div className="flex flex-col md:flex-row gap-4">
+                                <div className="flex-1">
+                                  <div className="text-sm font-semibold text-slate-500">
+                                    {activity.time} ({activity.duration})
                                   </div>
-                                  <div className="flex-shrink-0 w-32 h-32">
-                                    <img
-                                      src={activity.image}
-                                      alt={activity.title}
-                                      className="w-full h-full object-cover rounded-xl shadow-md"
-                                    />
-                                  </div>
+                                  <h4 className="text-lg font-bold text-slate-900 mb-2">
+                                    {activity.title}
+                                  </h4>
+                                  <p className="text-slate-600 leading-relaxed">
+                                    {activity.description}
+                                  </p>
+                                </div>
+                                <div className="flex-shrink-0 w-full md:w-40 h-32 md:h-28">
+                                  <img
+                                    src={activity.image}
+                                    alt={activity.title}
+                                    className="w-full h-full object-cover rounded-xl shadow-md"
+                                  />
                                 </div>
                               </div>
                             </motion.div>
@@ -550,39 +554,6 @@ const ItineraryCreationPage = () => {
                     </motion.div>
                   ))}
                 </div>
-
-                {/* Bottom Actions */}
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5 }}
-                  className="mt-12 bg-slate-50 rounded-2xl p-8 text-center"
-                >
-                  <h3 className="text-xl font-bold text-slate-900 mb-3">
-                    Love this itinerary?
-                  </h3>
-                  <p className="text-slate-600 mb-6">
-                    Save it to your account and access it anytime during your
-                    trip
-                  </p>
-                  <div className="flex justify-center gap-4">
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-semibold hover:shadow-lg transition"
-                    >
-                      Save to My Trips
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={resetForm}
-                      className="px-8 py-4 bg-white border-2 border-slate-200 text-slate-700 rounded-xl font-semibold hover:border-slate-300 transition"
-                    >
-                      Create Another
-                    </motion.button>
-                  </div>
-                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
