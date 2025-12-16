@@ -1,198 +1,162 @@
-🧭 Smart Travel & Tourism Web App
+# 🧭 Smart Travel & Tourism Web App  
 
-A modular, AI-assisted travel planning system focused on realistic, constraint-based itinerary generation for India.
+A modular, AI-assisted travel planning system focused on realistic, constraint-based itinerary generation for India.  
+This project separates backend intelligence from frontend experience, enabling parallel development without conflicts.
 
-This project separates backend intelligence from frontend experience, allowing parallel development without conflicts.
+---
 
-🏗️ Project Architecture (High Level)
-Backend (FastAPI)  →  Stable APIs  →  Frontend (React)
+## 🏗️ Architecture Overview  
+```
+Backend (FastAPI) → Stable APIs → Frontend (React)
+```
+- **Backend is the source of truth** – all logic resides here.  
+- **Frontend only consumes APIs** – no business logic duplication.
 
+---
 
-The backend is the source of truth.
-Frontend must not duplicate logic present in backend modules.
+## 🧠 Backend Modules  
+| Module | Description |
+|--------|-------------|
+| **Location Discovery** | India-only cities, prevents invalid/fictional locations |
+| **Route Feasibility Validation** | Distance calculation, feasibility check, min. recommended days |
+| **Travel Mode & Time Estimation** | Flight/Train/Bus/Car support, travel time estimation |
+| **Trip Configuration & Intent Locking** | Pace, budget, AI-assisted interest selection, optional constraints |
+| **AI Itinerary Generation** | Gemini-powered, constraint-aware, day-wise structured output |
 
-🧠 Core Backend Modules
+---
 
-Location Discovery
+## 🧰 Tech Stack  
+**Backend:** FastAPI, Pydantic, Google Gemini API  
+**Frontend:** React, Vite, Tailwind CSS  
 
-India-only cities
+---
 
-Prevents invalid or fictional locations
-
-Route Feasibility Validation
-
-Distance calculation
-
-Feasibility check (Yes / No)
-
-Minimum recommended days
-
-Travel Mode & Time Estimation
-
-Flight / Train / Bus / Car
-
-Estimated travel time
-
-Preferred mode validation
-
-Trip Configuration & Intent Locking
-
-Travel pace
-
-Budget tier
-
-AI-assisted interest selection
-
-Optional constraints
-
-AI model selection
-
-AI Itinerary Generation
-
-Gemini-powered
-
-Consumes validated constraints only
-
-Returns structured day-wise itinerary
-
-🧰 Tech Stack
-Backend
-
-FastAPI (Python)
-
-Pydantic
-
-Google Gemini API
-
-Frontend
-
-React
-
-Vite
-
-Tailwind CSS
-
-📁 Repository Structure
+## 📁 Repository Structure  
+```
 TourApp/
-├── backend/
-│   ├── main.py
-│   ├── requirements.txt
-│   ├── .env.example
-│   ├── routes/
-│   │   ├── location_routes.py
-│   │   ├── route_validation.py
-│   │   ├── travel_modes.py
-│   │   ├── trip_config.py
-│   │   └── itinerary.py
-│   └── utils/
-│       └── gemini_helpers.py
-│
-├── frontend/
-│   ├── src/
-│   │   ├── pages/
-│   │   └── services/
-│   ├── package.json
-│   └── vite.config.js
-│
-├── docs/
-│   └── api-contracts.md
-│
+├── backend/          # FastAPI backend
+├── frontend/         # React frontend
+├── docs/             # API contracts & documentation
 ├── .gitignore
 └── README.md
+```
 
-⚙️ Backend Setup (For Testing & API Use)
+---
 
-Required for anyone testing APIs or integrating frontend.
+## ⚙️ Setup Instructions  
 
-cd backend
-python -m venv venv
+### Prerequisites  
+- Python 3.9+  
+- Node.js 18+  
+- Google Gemini API Key  
 
-Activate virtual environment
-# Windows
-venv\Scripts\activate
+---
 
-# Linux / macOS
-source venv/bin/activate
+### 🔧 Backend Setup  
+1. Navigate to the backend directory:  
+   ```bash
+   cd backend
+   ```
 
-Install dependencies
-pip install -r requirements.txt
+2. Create and activate a virtual environment:  
+   ```bash
+   python -m venv venv
+   ```
+   - **Windows:** `venv\Scripts\activate`  
+   - **Linux/Mac:** `source venv/bin/activate`
 
-Environment variables
-cp .env.example .env
-# Add your Google Gemini API key inside .env
+3. Install dependencies:  
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-Run backend
-uvicorn main:app --reload
+4. Set up environment variables:  
+   ```bash
+   cp .env.example .env
+   ```
+   Edit `.env` and add your Google Gemini API key.
 
-Swagger API Docs
-http://127.0.0.1:8000/docs
+5. Run the backend server:  
+   ```bash
+   uvicorn main:app --reload
+   ```
+   - API docs (Swagger UI): [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)  
+   - Base URL: `http://127.0.0.1:8000`
 
-🎨 Frontend Development (TEAM INSTRUCTIONS)
+---
 
-Frontend developers should not modify backend code.
+### 🎨 Frontend Setup  
+1. Switch to the frontend development branch:  
+   ```bash
+   git checkout frontend-dev
+   ```
 
-Steps:
-git checkout frontend-dev
-cd frontend
-npm install
-npm run dev
+2. Navigate to the frontend directory:  
+   ```bash
+   cd frontend
+   ```
 
-Backend APIs
+3. Install dependencies:  
+   ```bash
+   npm install
+   ```
 
-Base URL: http://127.0.0.1:8000
+4. Start the development server:  
+   ```bash
+   npm run dev
+   ```
+   - Frontend runs on `http://localhost:5173` by default.
 
-API documentation available in Swagger (/docs)
+---
 
-Follow request/response schemas strictly
+## 🔀 Git Workflow Rules  
+**Branches:**  
+- `main` → Backend stable (managed by backend owner)  
+- `frontend-dev` → Frontend development branch  
 
-🔀 Git Workflow Rules (IMPORTANT)
-Branches
+**Rules:**  
+✅ Commit frontend changes only to `frontend-dev`  
+✅ Sync regularly with `main` to avoid drift  
+❌ Never commit `.env` files  
+❌ Never push directly to `main`  
+❌ Do not modify backend logic from frontend branch  
 
-main → Backend stable (maintained by backend owner)
+---
 
-frontend-dev → Frontend development (team branch)
+## 🔐 Security & Environment  
+- API keys are stored in `.env` (git-ignored).  
+- Use `.env.example` as a reference.  
+- Never share or commit actual credentials.
 
-Rules
+---
 
-❌ Do NOT commit .env
+## 📌 Important Notes for Teammates  
+- Backend logic is **final and validated**.  
+- **Swagger UI** (`/docs`) is the single source of API truth.  
+- If an API response seems incorrect, **do not** implement frontend workarounds.  
+- Report backend issues directly to the maintainer.
 
-❌ Do NOT push directly to main
+---
 
-❌ Do NOT modify backend logic from frontend branch
+## 👤 Maintainer  
+**Backend & System Architecture:** [Your Name]  
+**Frontend Development:** Handled independently by frontend team members.
 
-✅ Commit frontend changes only to frontend-dev
+---
 
-🔐 Environment & Security
+## ✅ Current Status  
+- Backend modules 1–6 complete ✅  
+- APIs verified via Swagger ✅  
+- AI failure handling implemented ✅  
+- Ready for frontend UI/UX implementation ✅  
 
-API keys are stored in .env
+---
 
-.env is ignored by Git
+## ❓ Need Help?  
+- For backend issues: Contact backend maintainer.  
+- For frontend issues: Discuss in the frontend team channel.  
+- Always refer to `docs/api-contracts.md` for API specifications.
 
-Use .env.example as reference only
+---
 
-📌 Important Notes for Teammates
-
-Backend logic is final and validated
-
-Swagger is the single source of API truth
-
-If an API response looks wrong, do not “fix” it in frontend
-
-Report backend issues instead of working around them
-
-👤 Maintainer
-
-Backend & System Architecture:
-Maintained by [Your Name]
-
-Frontend development handled independently by team members.
-
-✅ Current Status
-
-Backend modules 1–6 complete
-
-APIs verified in Swagger
-
-AI failures handled safely
-
-Ready for frontend UI/UX implementation
+Let’s build something amazing together! 🚀
