@@ -7,6 +7,7 @@ import {
 
 import LandingPage from "./pages/Home.jsx";
 import ItineraryCreationPage from "./pages/ItineraryPage.jsx";
+import TestItinerary from "./pages/TestItinerary.jsx";
 
 function App() {
 
@@ -15,6 +16,7 @@ function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/itinerary" element={<ItineraryCreationPage />} />
+        <Route path="/test" element={<TestItinerary />} /> 
       </Routes>
     </Router>
   );

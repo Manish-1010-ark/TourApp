@@ -1,0 +1,18 @@
+{
+  "destination": "Goa",
+  "days": 3,
+  "template": [
+    {
+      "day": 1,
+      "theme": "North Goa beaches and nightlife"
+    },
+    {
+      "day": 2,
+      "theme": "Old Goa culture and Panaji"
+    },
+    {
+      "day": 3,
+      "theme": "South Goa relaxation"
+    }
+  ]
+}
