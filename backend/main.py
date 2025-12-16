@@ -3,6 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import json
 from routes.location_routes import router as location_router
+from routes.route_validation import router as route_router
+from routes.travel_modes import router as travel_router
+from routes.trip_config import router as trip_config_router  # NEW: Module 5
+from routes.itinerary import router as itinerary_router     # Module 6
 
 from schemas.itinerary import ItineraryResponse
 from schemas.request import ItineraryRequest
@@ -12,9 +16,18 @@ load_dotenv()
 
 app = FastAPI()
 
-app.include_router(location_router)
+# ============================================================================
+# ROUTER REGISTRATION
+# ============================================================================
+app.include_router(location_router)      # Module 1: City selection
+app.include_router(route_router)         # Module 2: Route feasibility
+app.include_router(travel_router)        # Module 3: Travel modes
+app.include_router(trip_config_router)   # Module 5: Trip configuration (NEW)
+app.include_router(itinerary_router)     # Module 6: Itinerary generation
 
-# ✅ CRITICAL: Add CORS BEFORE route definitions
+# ============================================================================
+# CORS MIDDLEWARE
+# ============================================================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # For development - allows all origins
@@ -23,6 +36,9 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+# ============================================================================
+# EXISTING ITINERARY GENERATION (UNCHANGED)
+# ============================================================================
 
 # In-memory counter for premium model usage (simple gating)
 premium_usage_counter = {"flash_plus": 0}
@@ -161,7 +177,10 @@ def create_itinerary(request: ItineraryRequest):
             ]
         }
 
-# Optional: Reset endpoint for testing
+# ============================================================================
+# ADMIN ENDPOINTS
+# ============================================================================
+
 @app.post("/api/admin/reset-counter")
 def reset_premium_counter():
     """Reset premium model usage counter (for testing)"""
@@ -177,7 +196,21 @@ def get_stats():
         "remaining": PREMIUM_LIMIT - premium_usage_counter["flash_plus"]
     }
 
-# Optional: Health check endpoint
+# ============================================================================
+# HEALTH CHECK
+# ============================================================================
+
 @app.get("/")
 def read_root():
-    return {"status": "ok", "message": "AI Itinerary API is running"}
+    return {
+        "status": "ok",
+        "message": "AI Itinerary API is running",
+        "modules": {
+            "location_discovery": "/api/locations/search",
+            "route_validation": "/api/route/validate",
+            "travel_modes": "/api/travel/modes",
+            "trip_configuration": "/api/trip/configure",  # NEW
+            "interest_suggestion": "/api/interests/suggest",  # NEW
+            "itinerary_generation": "/api/itinerary"
+        }
+    }
