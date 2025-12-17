@@ -9,11 +9,18 @@ This module:
 4. Returns structured JSON response
 
 CRITICAL: This is PURE AI generation - no constraint validation here
+
+ENHANCED SCHEMA (v2.0):
+- More detailed day structure with themes and summaries
+- Flexible time blocks instead of fixed morning/afternoon/evening
+- Activity type categorization
+- Enhanced meal information
+- Photography and logistics hints
 """
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field, validator, field_validator
+from typing import List, Optional, Dict, Any, Literal
 import google.generativeai as genai
 import os
 import json
@@ -24,7 +31,7 @@ router = APIRouter()
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 # ============================================================================
-# REQUEST/RESPONSE SCHEMAS
+# ENHANCED REQUEST/RESPONSE SCHEMAS (v2.0)
 # ============================================================================
 
 class TripSummary(BaseModel):
@@ -60,37 +67,68 @@ class ItineraryRequest(BaseModel):
     optional_constraints: OptionalConstraints
     ai_model: str
 
-class TimeBlock(BaseModel):
-    """Time block for activities"""
-    title: str
-    description: str
+# --- NEW ENHANCED MODELS (v2.0) ---
 
-class DayItinerary(BaseModel):
-    """Single day itinerary"""
+class Meal(BaseModel):
+    """Enhanced meal information"""
+    meal_type: Literal["breakfast", "lunch", "dinner", "snack", "none"] = "none"
+    cuisine_type: str = "local"
+    dining_style: str = "restaurant"
+    veg_friendly: bool = True
+
+class ItineraryBlock(BaseModel):
+    """Enhanced itinerary time block"""
+    period: Literal["morning", "afternoon", "evening"]  # Simplified to only these three
+    time_window: str  # e.g., "09:00–11:30"
+    title: str
+    activity_type: Literal["sightseeing", "culture", "food", "relaxation", 
+                          "adventure", "shopping", "beach", "nature", 
+                          "history", "art", "music", "sports"]  # Strict list
+    description: str
+    logistics_hint: Optional[str] = None
+    meal: Meal = Field(default_factory=lambda: Meal(meal_type="none"))
+    photography_note: Optional[str] = None
+    
+    @field_validator('meal', mode='before')
+    @classmethod
+    def ensure_meal_not_none(cls, v):
+        """Ensure meal is never None - convert to default Meal if needed"""
+        if v is None:
+            return {"meal_type": "none", "cuisine_type": "local", "dining_style": "restaurant", "veg_friendly": True}
+        return v
+
+class DayPlan(BaseModel):
+    """Enhanced day plan with theme and summary"""
     day: int
-    morning: TimeBlock
-    afternoon: TimeBlock
-    evening: TimeBlock
+    day_theme: str
+    day_summary: str
+    blocks: List[ItineraryBlock]
+
+class OverallStyle(BaseModel):
+    """Overall trip style summary"""
+    pace: str
+    budget: str
 
 class ItineraryResponse(BaseModel):
-    """Final itinerary output"""
+    """Enhanced final itinerary output (v2.0)"""
     destination: str
     days: int
-    itinerary: List[DayItinerary]
+    overall_style: OverallStyle
+    itinerary: List[DayPlan]
 
 # ============================================================================
-# PROMPT CONSTRUCTION
+# ENHANCED PROMPT CONSTRUCTION (v2.0) - FIXED
 # ============================================================================
 
 def build_gemini_prompt(config: ItineraryRequest) -> str:
     """
-    Construct optimized Gemini prompt from Module 5 configuration.
+    Construct enhanced Gemini prompt from Module 5 configuration.
     
-    Design principles:
+    Enhanced design principles:
     - Clear structure for AI understanding
-    - Strict JSON format requirement
-    - Explicit constraints to prevent hallucination
-    - Balanced detail level
+    - Strict JSON format requirement matching new schema
+    - Flexible time blocks instead of fixed periods
+    - Enhanced categorization and metadata
     
     Args:
         config: Complete configuration from Module 5
@@ -117,7 +155,7 @@ def build_gemini_prompt(config: ItineraryRequest) -> str:
     
     optional_constraints_text = "\n".join(optional_text) if optional_text else "None"
     
-    prompt = f"""You are a professional travel planner creating a realistic itinerary.
+    prompt = f"""You are a professional travel planner creating a detailed, structured itinerary.
 
 Generate a well-paced travel itinerary using these constraints:
 
@@ -142,37 +180,119 @@ USER INTERESTS:
 ADDITIONAL PREFERENCES:
 {optional_constraints_text}
 
+IMPORTANT INSTRUCTIONS:
+1. Create {config.trip_summary.days} days of activities
+2. Each day should have 2-4 time blocks
+3. EVERY block must include a meal object, even if it's just {{"meal_type": "none"}}
+4. Add logistics hints for practical navigation
+5. Note photography opportunities if relevant
+6. Balance activity types across days
+7. Consider realistic travel times between locations
+8. Align with the user's budget and comfort level
+
+========================
+CRITICAL ENUM ENFORCEMENT (MANDATORY)
+========================
+- You MUST use ONLY the allowed enum values listed below.
+- DO NOT invent or vary enum values.
+- If unsure, map activities using the mapping rules.
+
+Allowed activity_type values:
+sightseeing, culture, food, relaxation,
+adventure, shopping, beach, nature,
+history, art, music, sports
+
+Allowed period values:
+morning, afternoon, evening
+
+Allowed meal_type values:
+breakfast, lunch, dinner, none
+
+If an activity involves photography:
+- Use activity_type = sightseeing
+- Put photography details ONLY inside photography_note
+
+If an activity involves architecture or heritage:
+- Use activity_type = history
+
+If an activity involves travel or driving:
+- Use activity_type = sightseeing
+
+For dining_style, use ONLY these normalized values:
+street, café, restaurant, beachside
+
 STRICT RULES:
 1. Respect the {config.constraints.places_per_day} places per day guideline
 2. Do NOT invent travel routes, distances, or transportation details
 3. Do NOT mention specific hotel names or exact prices
 4. Keep activities realistic and achievable for {config.trip_summary.destination}
-5. Balance activities across morning, afternoon, and evening
-6. Consider travel time between activities
-7. Include meal suggestions aligned with interests
-8. Provide practical, actionable descriptions
+5. Consider travel time between activities
+6. Provide practical, actionable descriptions
+7. Return ONLY valid JSON - no markdown, no code blocks, no explanations
+8. NEVER set "meal" to null - always include a meal object
+9. STRICTLY FOLLOW the enum values above - NO EXCEPTIONS
 
-OUTPUT FORMAT:
-Return ONLY valid JSON. No markdown, no code blocks, no explanations.
+CRITICAL: You MUST use this exact JSON structure:
 
 {{
   "destination": "{config.trip_summary.destination}",
   "days": {config.trip_summary.days},
+  "overall_style": {{
+    "pace": "{config.constraints.pace}",
+    "budget": "{config.constraints.budget}"
+  }},
   "itinerary": [
     {{
       "day": 1,
-      "morning": {{
-        "title": "Activity name",
-        "description": "Detailed description with timing, location, and practical tips"
-      }},
-      "afternoon": {{
-        "title": "Activity name",
-        "description": "Detailed description with timing, location, and practical tips"
-      }},
-      "evening": {{
-        "title": "Activity name",
-        "description": "Detailed description with timing, location, and practical tips"
-      }}
+      "day_theme": "Arrival & Exploration",
+      "day_summary": "Begin your journey with an introduction to the destination",
+      "blocks": [
+        {{
+          "period": "morning",
+          "time_window": "09:00–11:30",
+          "title": "Welcome Activity",
+          "activity_type": "sightseeing",
+          "description": "Start your trip with an introductory activity.",
+          "logistics_hint": "Optional practical tip",
+          "meal": {{
+            "meal_type": "breakfast",
+            "cuisine_type": "local",
+            "dining_style": "restaurant",
+            "veg_friendly": true
+          }},
+          "photography_note": "Optional photography suggestion"
+        }},
+        {{
+          "period": "afternoon",
+          "time_window": "13:00–15:30",
+          "title": "Cultural Experience",
+          "activity_type": "culture",
+          "description": "Explore local culture and traditions.",
+          "logistics_hint": "Optional practical tip",
+          "meal": {{
+            "meal_type": "lunch",
+            "cuisine_type": "local",
+            "dining_style": "restaurant",
+            "veg_friendly": true
+          }},
+          "photography_note": "Optional photography suggestion"
+        }},
+        {{
+          "period": "evening",
+          "time_window": "18:00–20:30",
+          "title": "Evening Relaxation",
+          "activity_type": "relaxation",
+          "description": "Wind down after a day of exploration.",
+          "logistics_hint": "Optional practical tip",
+          "meal": {{
+            "meal_type": "dinner",
+            "cuisine_type": "local",
+            "dining_style": "restaurant",
+            "veg_friendly": true
+          }},
+          "photography_note": "Optional photography suggestion"
+        }}
+      ]
     }}
   ]
 }}
@@ -182,7 +302,7 @@ Generate the complete {config.trip_summary.days}-day itinerary now:"""
     return prompt
 
 # ============================================================================
-# GEMINI RESPONSE EXTRACTION
+# GEMINI RESPONSE EXTRACTION (UNCHANGED)
 # ============================================================================
 
 def safe_extract_text(response) -> Optional[str]:
@@ -240,14 +360,19 @@ def clean_json_response(raw_text: str) -> str:
     
     return text.strip()
 
+# ============================================================================
+# ENHANCED VALIDATION LOGIC (v2.0) - FIXED
+# ============================================================================
+
 def validate_itinerary_structure(data: dict, expected_days: int) -> bool:
     """
-    Validate itinerary JSON structure.
+    Validate enhanced itinerary JSON structure.
     
-    Checks:
-    - Required fields present
-    - Correct number of days
-    - All time blocks present
+    Enhanced checks:
+    - Overall style present
+    - Each day has theme, summary, and flexible blocks
+    - Block structure with proper types
+    - Meal information when present
     
     Args:
         data: Parsed JSON dictionary
@@ -258,11 +383,19 @@ def validate_itinerary_structure(data: dict, expected_days: int) -> bool:
     """
     try:
         # Check top-level fields
-        if not all(key in data for key in ["destination", "days", "itinerary"]):
+        required_top_fields = ["destination", "days", "overall_style", "itinerary"]
+        if not all(key in data for key in required_top_fields):
             return False
         
         # Check days count
         if data["days"] != expected_days:
+            return False
+        
+        # Check overall_style structure
+        overall_style = data.get("overall_style", {})
+        if not isinstance(overall_style, dict):
+            return False
+        if not all(key in overall_style for key in ["pace", "budget"]):
             return False
         
         # Check itinerary array
@@ -270,29 +403,64 @@ def validate_itinerary_structure(data: dict, expected_days: int) -> bool:
         if len(itinerary) != expected_days:
             return False
         
+        # Valid period values (STRICT - only these three)
+        valid_periods = {"morning", "afternoon", "evening"}
+        
+        # Valid activity types (STRICT - only these)
+        valid_activity_types = {"sightseeing", "culture", "food", "relaxation", 
+                               "adventure", "shopping", "beach", "nature", 
+                               "history", "art", "music", "sports"}
+        
         # Check each day structure
-        for day_data in itinerary:
-            required_fields = ["day", "morning", "afternoon", "evening"]
-            if not all(field in day_data for field in required_fields):
+        for day_idx, day_data in enumerate(itinerary):
+            # Check day number is sequential
+            if day_data.get("day") != day_idx + 1:
                 return False
             
-            # Check each time block
-            for time_block in ["morning", "afternoon", "evening"]:
-                block = day_data[time_block]
-                if not isinstance(block, dict):
+            # Check required day fields
+            required_day_fields = ["day", "day_theme", "day_summary", "blocks"]
+            if not all(field in day_data for field in required_day_fields):
+                return False
+            
+            # Check blocks is a list
+            blocks = day_data.get("blocks", [])
+            if not isinstance(blocks, list):
+                return False
+            
+            # Ensure at least 1 block per day (more flexible)
+            if len(blocks) < 1:
+                return False
+            
+            # Check each block structure
+            for block in blocks:
+                # Required block fields
+                required_block_fields = ["period", "time_window", "title", 
+                                       "activity_type", "description"]
+                if not all(field in block for field in required_block_fields):
                     return False
-                if not all(key in block for key in ["title", "description"]):
+                
+                # Validate period value (STRICT)
+                if block["period"] not in valid_periods:
+                    print(f"Invalid period: {block['period']}. Must be one of {valid_periods}")
                     return False
-                if not block["title"] or not block["description"]:
+                
+                # Validate activity_type value (STRICT)
+                if block["activity_type"] not in valid_activity_types:
+                    print(f"Invalid activity_type: {block['activity_type']}. Must be one of {valid_activity_types}")
                     return False
+                
+                # Ensure meal field exists (even if null, our validator will fix it)
+                if "meal" not in block:
+                    block["meal"] = {"meal_type": "none"}
         
         return True
     
-    except Exception:
+    except Exception as e:
+        print(f"Validation error: {e}")
         return False
 
 # ============================================================================
-# MAIN GENERATION ENDPOINT
+# MAIN GENERATION ENDPOINT (UPDATED FOR v2.0) - FIXED
 # ============================================================================
 
 @router.post("/api/itinerary", response_model=ItineraryResponse)
@@ -302,18 +470,18 @@ async def generate_itinerary(config: ItineraryRequest):
     
     This is the final module - it trusts all input validation from Module 5.
     
-    Process:
-    1. Build optimized Gemini prompt
+    Enhanced process (v2.0):
+    1. Build enhanced Gemini prompt with new schema
     2. Call Gemini API with selected model
     3. Extract and clean response
-    4. Validate JSON structure
-    5. Return structured itinerary
+    4. Validate enhanced JSON structure
+    5. Return structured itinerary with flexible blocks
     
     Args:
         config: Complete configuration from Module 5
     
     Returns:
-        ItineraryResponse with structured itinerary
+        ItineraryResponse with enhanced structured itinerary
     
     Raises:
         HTTPException 500: AI generation or parsing failed
@@ -321,7 +489,7 @@ async def generate_itinerary(config: ItineraryRequest):
     
     try:
         # ====================================================================
-        # STEP 1: BUILD PROMPT
+        # STEP 1: BUILD ENHANCED PROMPT
         # ====================================================================
         prompt = build_gemini_prompt(config)
         
@@ -334,7 +502,7 @@ async def generate_itinerary(config: ItineraryRequest):
             prompt,
             generation_config=genai.GenerationConfig(
                 temperature=0.7,  # Balanced creativity
-                max_output_tokens=8000,  # Sufficient for detailed itineraries
+                max_output_tokens=10000,  # Increased for detailed blocks
             ),
         )
         
@@ -342,7 +510,10 @@ async def generate_itinerary(config: ItineraryRequest):
         # STEP 3: EXTRACT TEXT
         # ====================================================================
         raw_text = safe_extract_text(response)
-        
+        print("==================================")
+        print("Raw Gemini Response Preview:")
+        print(raw_text)  # Print first 500 chars for debugging
+        print("==================================")
         if not raw_text:
             raise ValueError("Gemini returned empty response")
         
@@ -359,8 +530,25 @@ async def generate_itinerary(config: ItineraryRequest):
             raise ValueError(f"Invalid JSON response from AI: {str(e)}")
         
         # ====================================================================
-        # STEP 5: VALIDATE STRUCTURE
+        # STEP 5: VALIDATE AND FIX STRUCTURE
         # ====================================================================
+        # First, fix any null meals in the data before validation
+        def fix_null_meals(data):
+            if isinstance(data, dict):
+                # Fix meal if it's null
+                if "meal" in data and data["meal"] is None:
+                    data["meal"] = {"meal_type": "none", "cuisine_type": "local", "dining_style": "restaurant", "veg_friendly": True}
+                # Recursively check nested structures
+                for key, value in data.items():
+                    if isinstance(value, (dict, list)):
+                        fix_null_meals(value)
+            elif isinstance(data, list):
+                for item in data:
+                    fix_null_meals(item)
+        
+        fix_null_meals(itinerary_data)
+        
+        # Now validate
         if not validate_itinerary_structure(itinerary_data, config.trip_summary.days):
             raise ValueError("AI response missing required fields or incorrect structure")
         
@@ -385,7 +573,7 @@ async def generate_itinerary(config: ItineraryRequest):
         )
 
 # ============================================================================
-# HEALTH CHECK
+# HEALTH CHECK (UPDATED)
 # ============================================================================
 
 @router.get("/api/itinerary/health")
@@ -393,8 +581,17 @@ async def itinerary_health():
     """Health check for itinerary generation service"""
     return {
         "status": "ok",
-        "service": "itinerary_generation",
+        "service": "itinerary_generation_v2",
         "endpoint": "/api/itinerary",
+        "schema_version": "2.0",
+        "features": [
+            "flexible_time_blocks",
+            "day_themes_and_summaries",
+            "activity_typing",
+            "enhanced_meal_info",
+            "photography_notes",
+            "logistics_hints"
+        ],
         "supported_models": [
             "gemini-flash-latest",
             "gemini-2.5-flash"
@@ -404,11 +601,11 @@ async def itinerary_health():
     }
 
 # ============================================================================
-# EXAMPLE USAGE
+# ENHANCED EXAMPLE USAGE (v2.0)
 # ============================================================================
 
 """
-Example Request:
+Example Request (UNCHANGED - backward compatible):
 POST /api/itinerary
 
 {
@@ -438,34 +635,10 @@ POST /api/itinerary
     "avoid_early_mornings": false,
     "prefer_less_walking": false,
     "family_friendly": true,
-    "vegetarian_friendly": false,
+    "vegetarian_friendly": true,
     "photography_focus": true
   },
   "ai_model": "gemini-flash-latest"
-}
-
-Example Response:
-{
-  "destination": "Goa",
-  "days": 3,
-  "itinerary": [
-    {
-      "day": 1,
-      "morning": {
-        "title": "Arrival & Calangute Beach",
-        "description": "Arrive in Goa via train. Check into hotel in North Goa. Head to Calangute Beach for first beach experience. Relax, swim, try beach shacks for lunch. Timing: 12 PM - 3 PM."
-      },
-      "afternoon": {
-        "title": "Fort Aguada Exploration",
-        "description": "Visit historic Fort Aguada (17th century Portuguese fort). Panoramic views of Arabian Sea. Photography opportunity. Explore lighthouse and ramparts. Timing: 4 PM - 6 PM."
-      },
-      "evening": {
-        "title": "Candolim Beach Sunset & Dinner",
-        "description": "Watch sunset at Candolim Beach. Dinner at beachside restaurant - try Goan fish curry and prawn balchão. Live music venues available. Timing: 7 PM - 10 PM."
-      }
-    },
-    ...
-  ]
 }
 
 To test manually:

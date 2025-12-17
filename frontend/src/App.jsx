@@ -13,6 +13,8 @@ import TravelMode from "./pages/TravelMode.jsx";
 import TripConfiguration from "./pages/TripConfiguration.jsx";
 import ItineraryGeneration from "./pages/ItineraryGeneration.jsx";
 
+import TripPreparation from "./pages/TripPreparation.jsx";
+
 function App() {
 
   return (
@@ -25,6 +27,9 @@ function App() {
         <Route path="/travel-mode" element={<TravelMode />} />
         <Route path="/trip-configuration" element={<TripConfiguration />} />
         <Route path="/itinerary-generation" element={<ItineraryGeneration />} />
+
+        <Route path="/trip-prep" element={<TripPreparation />} />
+
       </Routes>
     </Router>
   );

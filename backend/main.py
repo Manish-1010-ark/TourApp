@@ -44,138 +44,138 @@ app.add_middleware(
 premium_usage_counter = {"flash_plus": 0}
 PREMIUM_LIMIT = 3  # Allow 3 uses per server session
 
-@app.post("/api/itinerary", response_model=ItineraryResponse)
-def create_itinerary(request: ItineraryRequest):
-    """
-    Generate AI-powered travel itinerary
+# @app.post("/api/itinerary", response_model=ItineraryResponse)
+# def create_itinerary(request: ItineraryRequest):
+#     """
+#     Generate AI-powered travel itinerary
     
-    Args:
-        request: ItineraryRequest containing destination, interests, and model choice
+#     Args:
+#         request: ItineraryRequest containing destination, interests, and model choice
     
-    Returns:
-        ItineraryResponse with generated itinerary
+#     Returns:
+#         ItineraryResponse with generated itinerary
     
-    Raises:
-        HTTPException: 400 for invalid inputs, 429 for rate limits
-    """
-    destination = request.destination
-    interests = request.interests
-    model = request.model
+#     Raises:
+#         HTTPException: 400 for invalid inputs, 429 for rate limits
+#     """
+#     destination = request.destination
+#     interests = request.interests
+#     model = request.model
 
-    # Validation
-    if not destination or not destination.strip():
-        raise HTTPException(
-            status_code=400, 
-            detail="Destination is required"
-        )
+#     # Validation
+#     if not destination or not destination.strip():
+#         raise HTTPException(
+#             status_code=400, 
+#             detail="Destination is required"
+#         )
     
-    if not interests or len(interests) == 0:
-        raise HTTPException(
-            status_code=400, 
-            detail="At least one interest is required"
-        )
+#     if not interests or len(interests) == 0:
+#         raise HTTPException(
+#             status_code=400, 
+#             detail="At least one interest is required"
+#         )
 
-    # Premium model gating
-    if model == "flash_plus":
-        if premium_usage_counter["flash_plus"] >= PREMIUM_LIMIT:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Premium model limit reached ({PREMIUM_LIMIT} uses per session). Please restart server or use standard model."
-            )
-        premium_usage_counter["flash_plus"] += 1
-        print(f"✨ Premium model usage: {premium_usage_counter['flash_plus']}/{PREMIUM_LIMIT}")
+#     # Premium model gating
+#     if model == "flash_plus":
+#         if premium_usage_counter["flash_plus"] >= PREMIUM_LIMIT:
+#             raise HTTPException(
+#                 status_code=429,
+#                 detail=f"Premium model limit reached ({PREMIUM_LIMIT} uses per session). Please restart server or use standard model."
+#             )
+#         premium_usage_counter["flash_plus"] += 1
+#         print(f"✨ Premium model usage: {premium_usage_counter['flash_plus']}/{PREMIUM_LIMIT}")
 
-    # Temporary: only Goa 3 days supported
-    if destination.lower() != "goa":
-        raise HTTPException(
-            status_code=400, 
-            detail="Only 'Goa' is supported as a destination currently"
-        )
+#     # Temporary: only Goa 3 days supported
+#     if destination.lower() != "goa":
+#         raise HTTPException(
+#             status_code=400, 
+#             detail="Only 'Goa' is supported as a destination currently"
+#         )
 
-    # Load template
-    try:
-        with open("templates/goa_3_days.json", "r") as f:
-            template = json.load(f)
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=500,
-            detail="Template file not found. Please check server configuration."
-        )
+#     # Load template
+#     try:
+#         with open("templates/goa_3_days.json", "r") as f:
+#             template = json.load(f)
+#     except FileNotFoundError:
+#         raise HTTPException(
+#             status_code=500,
+#             detail="Template file not found. Please check server configuration."
+#         )
 
-    # Generate itinerary
-    try:
-        ai_output = generate_itinerary(template, interests, model)
-        parsed = json.loads(ai_output)
-        return parsed
+#     # Generate itinerary
+#     try:
+#         ai_output = generate_itinerary(template, interests, model)
+#         parsed = json.loads(ai_output)
+#         return parsed
     
-    except json.JSONDecodeError as e:
-        print(f"🔥 JSON Parse Error: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to parse AI response. Please try again."
-        )
+#     except json.JSONDecodeError as e:
+#         print(f"🔥 JSON Parse Error: {e}")
+#         raise HTTPException(
+#             status_code=500,
+#             detail="Failed to parse AI response. Please try again."
+#         )
     
-    except ValueError as e:
-        print(f"🔥 Value Error: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
+#     except ValueError as e:
+#         print(f"🔥 Value Error: {e}")
+#         raise HTTPException(
+#             status_code=500,
+#             detail=str(e)
+#         )
     
-    except Exception as e:
-        print(f"🔥 Unexpected Error: {e}")
-        # Return fallback itinerary instead of exposing error
-        return {
-            "destination": "Goa",
-            "days": 3,
-            "itinerary": [
-                {
-                    "day": 1,
-                    "morning": {
-                        "title": "Beach Exploration",
-                        "description": "Start your day at a peaceful North Goa beach."
-                    },
-                    "afternoon": {
-                        "title": "Local Cuisine",
-                        "description": "Enjoy authentic Goan seafood at a beach shack."
-                    },
-                    "evening": {
-                        "title": "Sunset Views",
-                        "description": "Watch the sunset while exploring coastal cafés."
-                    }
-                },
-                {
-                    "day": 2,
-                    "morning": {
-                        "title": "Cultural Heritage",
-                        "description": "Visit historic churches in Old Goa."
-                    },
-                    "afternoon": {
-                        "title": "City Exploration",
-                        "description": "Walk through colorful Fontainhas in Panaji."
-                    },
-                    "evening": {
-                        "title": "River Cruise",
-                        "description": "Enjoy an evening cruise on the Mandovi River."
-                    }
-                },
-                {
-                    "day": 3,
-                    "morning": {
-                        "title": "South Goa Beaches",
-                        "description": "Relax at serene beaches like Palolem or Colva."
-                    },
-                    "afternoon": {
-                        "title": "Leisure Time",
-                        "description": "Unwind with a beachside lunch and water activities."
-                    },
-                    "evening": {
-                        "title": "Departure Prep",
-                        "description": "Shop for souvenirs and prepare for departure."
-                    }
-                }
-            ]
-        }
+#     except Exception as e:
+#         print(f"🔥 Unexpected Error: {e}")
+#         # Return fallback itinerary instead of exposing error
+#         return {
+#             "destination": "Goa",
+#             "days": 3,
+#             "itinerary": [
+#                 {
+#                     "day": 1,
+#                     "morning": {
+#                         "title": "Beach Exploration",
+#                         "description": "Start your day at a peaceful North Goa beach."
+#                     },
+#                     "afternoon": {
+#                         "title": "Local Cuisine",
+#                         "description": "Enjoy authentic Goan seafood at a beach shack."
+#                     },
+#                     "evening": {
+#                         "title": "Sunset Views",
+#                         "description": "Watch the sunset while exploring coastal cafés."
+#                     }
+#                 },
+#                 {
+#                     "day": 2,
+#                     "morning": {
+#                         "title": "Cultural Heritage",
+#                         "description": "Visit historic churches in Old Goa."
+#                     },
+#                     "afternoon": {
+#                         "title": "City Exploration",
+#                         "description": "Walk through colorful Fontainhas in Panaji."
+#                     },
+#                     "evening": {
+#                         "title": "River Cruise",
+#                         "description": "Enjoy an evening cruise on the Mandovi River."
+#                     }
+#                 },
+#                 {
+#                     "day": 3,
+#                     "morning": {
+#                         "title": "South Goa Beaches",
+#                         "description": "Relax at serene beaches like Palolem or Colva."
+#                     },
+#                     "afternoon": {
+#                         "title": "Leisure Time",
+#                         "description": "Unwind with a beachside lunch and water activities."
+#                     },
+#                     "evening": {
+#                         "title": "Departure Prep",
+#                         "description": "Shop for souvenirs and prepare for departure."
+#                     }
+#                 }
+#             ]
+#         }
 
 # ============================================================================
 # ADMIN ENDPOINTS

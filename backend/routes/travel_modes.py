@@ -2,137 +2,71 @@
 """
 Module 3: Travel Mode, Distance & Time Engine (Deterministic)
 
-This module recommends optimal travel modes and validates user preferences
-based on distance and trip duration. Uses India-specific travel assumptions.
+REFACTORED: Now integrates with centralized city database
+- Supports both city names and raw distance
+- Validates cities against data/cities.py
+- Calculates distance automatically from city names
+- Reuses distance calculation logic
 
 NO AI MODELS | NO EXTERNAL APIS | PURE LOGIC
 """
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict
 from enum import Enum
+from data.cities import get_city_by_name, validate_city_exists
+from utils.distance import calculate_distance
+from utils.travel_time import (
+    calculate_travel_time,
+    format_travel_time,
+    TravelMode,
+    SPEED_CONFIG
+)
 
 router = APIRouter()
-
-# ============================================================================
-# ENUMS & CONSTANTS
-# ============================================================================
-
-class TravelMode(str, Enum):
-    """Supported travel modes in India"""
-    FLIGHT = "flight"
-    TRAIN = "train"
-    BUS = "bus"
-    CAR = "car"
-
-# India-specific average speeds (km/h)
-# These are realistic averages accounting for:
-# - Road conditions, traffic, stops
-# - Train speeds (mix of express and regular)
-# - Flight speeds plus ground time
-SPEED_CONFIG = {
-    TravelMode.FLIGHT: {
-        "cruise_speed": 700,  # km/h in air
-        "fixed_buffer": 3.0   # hours (check-in, security, boarding, taxi)
-    },
-    TravelMode.TRAIN: {
-        "avg_speed": 65  # km/h (mix of express/mail trains)
-    },
-    TravelMode.BUS: {
-        "avg_speed": 45  # km/h (highways + stops)
-    },
-    TravelMode.CAR: {
-        "avg_speed": 55  # km/h (realistic with breaks)
-    }
-}
 
 # ============================================================================
 # REQUEST/RESPONSE SCHEMAS
 # ============================================================================
 
 class TravelModeRequest(BaseModel):
-    """Request for travel mode recommendations"""
-    distance_km: int = Field(..., ge=1, le=5000, description="Distance in kilometers")
+    """
+    Request for travel mode recommendations
+    
+    Supports two input modes:
+    1. City names (recommended): Auto-calculates distance
+    2. Raw distance: For pre-calculated distances
+    """
+    # Option 1: City names (recommended)
+    source_city: Optional[str] = Field(None, description="Source city name")
+    destination_city: Optional[str] = Field(None, description="Destination city name")
+    
+    # Option 2: Raw distance (fallback)
+    distance_km: Optional[int] = Field(None, ge=1, le=5000, description="Distance in kilometers")
+    
     days: int = Field(..., ge=1, le=30, description="Trip duration in days")
     preferred_mode: Optional[TravelMode] = Field(None, description="User's preferred travel mode")
+    
+    @field_validator('source_city', 'destination_city')
+    @classmethod
+    def validate_city_name(cls, v):
+        """Trim whitespace from city names"""
+        if v:
+            return v.strip()
+        return v
+
 
 class TravelModeResponse(BaseModel):
     """Response with travel mode recommendations and validation"""
+    distance_km: int
+    source_city: Optional[str] = None
+    destination_city: Optional[str] = None
     recommended_modes: List[str]
-    estimated_times: Dict[str, str]  # Changed from Optional[str] to str
+    estimated_times: Dict[str, str]
     preferred_mode_valid: bool
     preferred_mode_reason: Optional[str] = None
 
-# ============================================================================
-# TIME CALCULATION HELPERS
-# ============================================================================
-
-def calculate_travel_time(distance_km: int, mode: TravelMode) -> float:
-    """
-    Calculate estimated one-way travel time in hours.
-    
-    Why these calculations?
-    - Flight: Includes significant ground time (check-in, security, taxi)
-    - Train: Average speed accounts for stops and express/mail mix
-    - Bus: Lower speed due to frequent stops and road conditions
-    - Car: Realistic speed with rest breaks factored in
-    
-    Args:
-        distance_km: Distance in kilometers
-        mode: Travel mode
-    
-    Returns:
-        Travel time in hours (float)
-    """
-    if mode == TravelMode.FLIGHT:
-        # Flight time = (distance / cruise speed) + fixed buffer
-        flying_time = distance_km / SPEED_CONFIG[TravelMode.FLIGHT]["cruise_speed"]
-        total_time = flying_time + SPEED_CONFIG[TravelMode.FLIGHT]["fixed_buffer"]
-        return total_time
-    
-    elif mode == TravelMode.TRAIN:
-        return distance_km / SPEED_CONFIG[TravelMode.TRAIN]["avg_speed"]
-    
-    elif mode == TravelMode.BUS:
-        return distance_km / SPEED_CONFIG[TravelMode.BUS]["avg_speed"]
-    
-    elif mode == TravelMode.CAR:
-        return distance_km / SPEED_CONFIG[TravelMode.CAR]["avg_speed"]
-    
-    return 0.0
-
-def format_travel_time(hours: float) -> str:
-    """
-    Format travel time into human-readable string.
-    
-    Why ranges for long trips?
-    - Accounts for variability in traffic, weather, stops
-    - More realistic than precise times for 20+ hour journeys
-    
-    Args:
-        hours: Time in hours
-    
-    Returns:
-        Formatted string (e.g., "5h 30m" or "22-24 hours")
-    """
-    if hours < 1:
-        minutes = int(hours * 60)
-        return f"{minutes}m"
-    
-    # For short trips (< 12 hours), show exact time
-    if hours < 12:
-        h = int(hours)
-        m = int((hours - h) * 60)
-        if m > 0:
-            return f"{h}h {m}m"
-        return f"{h}h"
-    
-    # For long trips (≥ 12 hours), show range
-    # Range is ±1 hour to account for variability
-    lower = int(hours - 1)
-    upper = int(hours + 1)
-    return f"{lower}-{upper} hours"
 
 # ============================================================================
 # MODE RECOMMENDATION LOGIC
@@ -142,20 +76,14 @@ def get_recommended_modes(distance_km: int) -> List[TravelMode]:
     """
     Recommend travel modes based on distance.
     
-    Why these distance brackets?
-    - ≤ 300 km: Road travel is efficient and flexible
-    - 300-700 km: Rail becomes competitive, bus still viable
-    - 700-1200 km: Long distance, rail/air best
-    - > 1200 km: Air travel becomes necessary for time efficiency
-    
     Distance-based logic (India-specific):
     - Short (≤ 300 km): Car, Bus
       Example: Delhi-Agra (230km), Mumbai-Pune (150km)
     
-    - Medium (300-700 km): Train, Bus
+    - Medium (300–700 km): Train, Bus
       Example: Mumbai-Goa (580km), Delhi-Jaipur (280km)
     
-    - Long (700-1200 km): Train, Flight
+    - Long (700–1200 km): Train, Flight
       Example: Delhi-Mumbai (1400km), Bangalore-Hyderabad (575km)
     
     - Very Long (> 1200 km): Flight (primary), Train (secondary)
@@ -168,24 +96,14 @@ def get_recommended_modes(distance_km: int) -> List[TravelMode]:
         List of recommended travel modes (ordered by preference)
     """
     if distance_km <= 300:
-        # Short distance: Road transport is most efficient
         return [TravelMode.CAR, TravelMode.BUS]
-    
     elif distance_km <= 700:
-        # Medium distance: Train and bus are optimal
         return [TravelMode.TRAIN, TravelMode.BUS]
-    
     elif distance_km <= 1200:
-        # Long distance: Train or flight depending on comfort/budget
         return [TravelMode.TRAIN, TravelMode.FLIGHT]
-    
     else:
-        # Very long distance: Flight is primary recommendation
         return [TravelMode.FLIGHT, TravelMode.TRAIN]
 
-# ============================================================================
-# MODE FEASIBILITY VALIDATION
-# ============================================================================
 
 def validate_preferred_mode(
     distance_km: int,
@@ -204,7 +122,6 @@ def validate_preferred_mode(
     - If one-way travel takes > 40% of total trip time, it's impractical
     - Example: 3-day trip = 72 hours. If travel takes > 28.8 hours one-way,
       you spend more time traveling than enjoying the destination
-    - This accounts for round-trip travel taking ~80% of trip time
     
     Args:
         distance_km: Distance in kilometers
@@ -236,8 +153,8 @@ def validate_preferred_mode(
             f"Consider a faster mode or extend your trip duration."
         )
     
-    # All checks passed
     return (True, None)
+
 
 # ============================================================================
 # MAIN ENDPOINT
@@ -248,54 +165,156 @@ async def get_travel_modes(request: TravelModeRequest):
     """
     Get travel mode recommendations and validate preferred mode.
     
-    This endpoint provides:
-    1. Distance-appropriate travel mode recommendations
-    2. Estimated travel times for all modes
-    3. Validation of user's preferred mode (if provided)
+    **NEW: Two input modes**
+    1. City names (recommended):
+       - Validates against city database
+       - Auto-calculates distance
+       - Returns city names in response
     
-    Logic flow:
-    - Calculate recommended modes based on distance brackets
-    - Calculate estimated times for ALL modes (for comparison)
-    - If user provided preferred mode, validate against:
-      a) Distance-appropriate modes
-      b) Time feasibility (40% rule)
+    2. Raw distance (fallback):
+       - For pre-calculated distances
+       - Direct distance input
+    
+    **Logic flow:**
+    - Calculate/use distance
+    - Get distance-appropriate travel mode recommendations
+    - Calculate estimated times for all modes
+    - Validate user's preferred mode (if provided)
     
     Args:
-        request: TravelModeRequest with distance, days, and optional preferred mode
+        request: TravelModeRequest with cities/distance, days, and optional preferred mode
     
     Returns:
         TravelModeResponse with recommendations and validation
     """
     
-    # Step 1: Get distance-based recommendations
-    recommended_modes = get_recommended_modes(request.distance_km)
+    distance_km = None
+    source_city_name = destination_city_name = None
     
-    # Step 2: Calculate estimated times for ALL modes
-    # Why all modes? So users can compare even if not recommended
+    # ========================================================================
+    # INPUT VALIDATION: City names OR distance must be provided
+    # ========================================================================
+    
+    # Case 1: City names provided (recommended path)
+    if request.source_city and request.destination_city:
+        # Validate source city
+        if not validate_city_exists(request.source_city):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Source city '{request.source_city}' not found in database. "
+                       "Please use /api/locations/search to find valid cities."
+            )
+        
+        # Validate destination city
+        if not validate_city_exists(request.destination_city):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Destination city '{request.destination_city}' not found in database. "
+                       "Please use /api/locations/search to find valid cities."
+            )
+        
+        # Get city data and calculate distance
+        source_city = get_city_by_name(request.source_city)
+        dest_city = get_city_by_name(request.destination_city)
+        
+        distance_km = calculate_distance(
+            source_city["lat"], source_city["lon"],
+            dest_city["lat"], dest_city["lon"]
+        )
+        
+        source_city_name = source_city["name"]
+        destination_city_name = dest_city["name"]
+    
+    # Case 2: Raw distance provided (fallback)
+    elif request.distance_km:
+        distance_km = request.distance_km
+    
+    # Case 3: Neither provided - ERROR
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either (source_city + destination_city) OR distance_km. "
+                   "Do not mix both formats."
+        )
+    
+    # ========================================================================
+    # TRAVEL MODE RECOMMENDATIONS
+    # ========================================================================
+    
+    # Get distance-based recommendations
+    recommended_modes = get_recommended_modes(distance_km)
+    
+    # Calculate estimated times for ALL modes (for comparison)
     estimated_times = {}
     for mode in TravelMode:
-        travel_time = calculate_travel_time(request.distance_km, mode)
+        travel_time = calculate_travel_time(distance_km, mode)
         estimated_times[mode.value] = format_travel_time(travel_time)
     
-    # Step 3: Validate preferred mode (if provided)
+    # ========================================================================
+    # VALIDATE PREFERRED MODE (if provided)
+    # ========================================================================
+    
     preferred_mode_valid = True
     preferred_mode_reason = None
     
     if request.preferred_mode is not None:
         preferred_mode_valid, preferred_mode_reason = validate_preferred_mode(
-            request.distance_km,
+            distance_km,
             request.days,
             request.preferred_mode,
             recommended_modes
         )
     
-    # Step 4: Return response
+    # ========================================================================
+    # RESPONSE
+    # ========================================================================
+    
     return TravelModeResponse(
+        distance_km=distance_km,
+        source_city=source_city_name,
+        destination_city=destination_city_name,
         recommended_modes=[mode.value for mode in recommended_modes],
         estimated_times=estimated_times,
         preferred_mode_valid=preferred_mode_valid,
         preferred_mode_reason=preferred_mode_reason
     )
+
+
+# ============================================================================
+# CONVENIENCE ENDPOINT: Quick city-to-city travel modes
+# ============================================================================
+
+@router.get("/api/travel/modes/{source_city}/{destination_city}/{days}")
+async def get_travel_modes_simple(
+    source_city: str,
+    destination_city: str,
+    days: int,
+    preferred_mode: Optional[TravelMode] = None
+) -> TravelModeResponse:
+    """
+    Simplified GET endpoint for quick travel mode lookup
+    
+    Example:
+        GET /api/travel/modes/Mumbai/Goa/3
+        GET /api/travel/modes/Mumbai/Goa/3?preferred_mode=train
+    
+    Args:
+        source_city: Source city name
+        destination_city: Destination city name
+        days: Trip duration in days
+        preferred_mode: Optional preferred travel mode
+    
+    Returns:
+        TravelModeResponse
+    """
+    request = TravelModeRequest(
+        source_city=source_city,
+        destination_city=destination_city,
+        days=days,
+        preferred_mode=preferred_mode
+    )
+    return await get_travel_modes(request)
+
 
 # ============================================================================
 # HEALTH CHECK
@@ -307,6 +326,8 @@ async def travel_health():
     return {
         "status": "ok",
         "service": "travel_modes",
+        "data_source": "data/cities.py",
+        "input_modes": ["city_names", "raw_distance"],
         "supported_modes": [mode.value for mode in TravelMode],
         "speed_assumptions": {
             "flight": "700 km/h + 3h buffer",
@@ -322,26 +343,33 @@ async def travel_health():
         }
     }
 
+
 # ============================================================================
 # EXAMPLE USAGE & TESTING
 # ============================================================================
 
 """
-Example 1: Short trip - Delhi to Agra (230km, 2 days)
+NEW USAGE EXAMPLES (City Names - Recommended)
+==============================================
+
+Example 1: Short trip - Delhi to Agra (city names)
 POST /api/travel/modes
 {
-  "distance_km": 230,
-  "days": 2,
-  "preferred_mode": null
+  "source_city": "Delhi",
+  "destination_city": "Agra",
+  "days": 2
 }
 Response:
 {
+  "distance_km": 233,
+  "source_city": "Delhi",
+  "destination_city": "Agra",
   "recommended_modes": ["car", "bus"],
   "estimated_times": {
     "flight": "3h 20m",
-    "train": "3h 32m",
-    "bus": "5h 6m",
-    "car": "4h 11m"
+    "train": "3h 35m",
+    "bus": "5h 10m",
+    "car": "4h 14m"
   },
   "preferred_mode_valid": true,
   "preferred_mode_reason": null
@@ -349,18 +377,22 @@ Response:
 
 ---
 
-Example 2: Medium trip - Mumbai to Goa (461km, 3 days)
+Example 2: Medium trip - Mumbai to Goa with preference
 POST /api/travel/modes
 {
-  "distance_km": 461,
+  "source_city": "Mumbai",
+  "destination_city": "Goa",
   "days": 3,
   "preferred_mode": "train"
 }
 Response:
 {
+  "distance_km": 461,
+  "source_city": "Mumbai",
+  "destination_city": "Goa",
   "recommended_modes": ["train", "bus"],
   "estimated_times": {
-    "flight": "3h 40m",
+    "flight": "3h 39m",
     "train": "7h 5m",
     "bus": "10h 14m",
     "car": "8h 23m"
@@ -371,15 +403,39 @@ Response:
 
 ---
 
-Example 3: Long trip - Delhi to Bangalore (2157km, 3 days) - INVALID
+Example 3: GET endpoint (simplified)
+GET /api/travel/modes/Mumbai/Goa/3?preferred_mode=train
+Response: Same as POST example above
+
+---
+
+Example 4: Invalid city name
 POST /api/travel/modes
 {
-  "distance_km": 2157,
+  "source_city": "InvalidCity",
+  "destination_city": "Goa",
+  "days": 3
+}
+Response: 400 Bad Request
+{
+  "detail": "Source city 'InvalidCity' not found in database. Please use /api/locations/search to find valid cities."
+}
+
+---
+
+Example 5: Long trip - Invalid preferred mode
+POST /api/travel/modes
+{
+  "source_city": "Delhi",
+  "destination_city": "Bangalore",
   "days": 3,
   "preferred_mode": "train"
 }
 Response:
 {
+  "distance_km": 2157,
+  "source_city": "Delhi",
+  "destination_city": "Bangalore",
   "recommended_modes": ["flight", "train"],
   "estimated_times": {
     "flight": "6h 5m",
@@ -393,21 +449,27 @@ Response:
 
 ---
 
-Example 4: Long trip - Delhi to Bangalore (2157km, 5 days) - VALID
+BACKWARD COMPATIBLE (Raw Distance)
+===================================
+
+Example 6: Raw distance (still works)
 POST /api/travel/modes
 {
-  "distance_km": 2157,
-  "days": 5,
+  "distance_km": 461,
+  "days": 3,
   "preferred_mode": "train"
 }
 Response:
 {
-  "recommended_modes": ["flight", "train"],
+  "distance_km": 461,
+  "source_city": null,
+  "destination_city": null,
+  "recommended_modes": ["train", "bus"],
   "estimated_times": {
-    "flight": "6h 5m",
-    "train": "33-35 hours",
-    "bus": "47-49 hours",
-    "car": "39-41 hours"
+    "flight": "3h 39m",
+    "train": "7h 5m",
+    "bus": "10h 14m",
+    "car": "8h 23m"
   },
   "preferred_mode_valid": true,
   "preferred_mode_reason": null
@@ -416,6 +478,20 @@ Response:
 ---
 
 To test manually:
+# City names (recommended)
+curl -X POST http://127.0.0.1:8000/api/travel/modes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_city": "Mumbai",
+    "destination_city": "Goa",
+    "days": 3,
+    "preferred_mode": "train"
+  }'
+
+# GET endpoint
+curl "http://127.0.0.1:8000/api/travel/modes/Mumbai/Goa/3?preferred_mode=train"
+
+# Raw distance (backward compatible)
 curl -X POST http://127.0.0.1:8000/api/travel/modes \
   -H "Content-Type: application/json" \
   -d '{
