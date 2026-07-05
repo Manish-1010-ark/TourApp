@@ -6,11 +6,12 @@ class ItineraryRequest(BaseModel):
     interests: List[str] = Field(..., min_items=1, description="List of user interests")
     model: str = Field(default="flash", description="AI model choice: 'flash' or 'flash_plus'")
     
-    class Config:
-        schema_extra = {
+    model_config = {
+    "json_schema_extra": {
             "example": {
                 "destination": "Goa",
                 "interests": ["beaches", "local_food", "nightlife"],
                 "model": "flash"
             }
         }
+    }
