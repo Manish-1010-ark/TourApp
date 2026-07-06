@@ -1,736 +1,925 @@
-import { useState, useEffect } from "react"; // MODIFIED: Imported useEffect
-import { motion, AnimatePresence } from "framer-motion"; // MODIFIED: Imported AnimatePresence
+import { useState, useEffect, useRef, useCallback, useId } from "react";
 import {
-  MapPin,
-  Calendar,
-  Sparkles,
-  ArrowRight,
-  Instagram,
-  Twitter,
-  Facebook,
-  Mail,
-  CheckCircle,
   Menu,
   X,
+  ChevronDown,
+  Check,
+  Mail,
+  User,
+  Compass,
+  Route,
+  Building2,
 } from "lucide-react";
+import { motion } from "framer-motion";
+
+import { signIn, signUp } from "../services/authService";
 import { useNavigate } from "react-router-dom";
+import InstallPWAButton from "../components/InstallPWAButton";
 
-import tajMahalImg from "../assets/tajmahal.jpg";
-import keralaImg from "../assets/kerala-backwaters.jpg";
-import goldenTempleImg from "../assets/golden-temple.jpg";
-import hampiImg from "../assets/hampi-chariot.jpg";
-
-const heroImages = [
+// Background slideshow images — Indian travel destinations.
+// `coords` feeds the waypoint tag in the hero (see WaypointTag below) —
+// a small nod to the fact that this product is, at heart, a route builder.
+const SLIDES = [
   {
-    src: tajMahalImg, // Use the variable here
-    alt: "Taj Mahal in Agra",
-    topCard: { icon: "🕌", title: "Taj Mahal", location: "Agra, UP" },
-    bottomCard: {
-      icon: "🏛️",
-      title: "Ancient Wonders",
-      location: "Historical India",
-    },
+    label: "The Taj Mahal",
+    coords: "27.1751° N, 78.0421° E",
+    url: "https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&w=1920&q=80",
   },
   {
-    src: keralaImg, // Use the variable here
-    alt: "Kerala backwaters with a houseboat",
-    topCard: {
-      icon: "🛶",
-      title: "Kerala Backwaters",
-      location: "Alleppey, Kerala",
-    },
-    bottomCard: {
-      icon: "🌴",
-      title: "Lush Landscapes",
-      location: "Serene South",
-    },
+    label: "Himalayan Snow Peaks",
+    coords: "30.7333° N, 79.0667° E",
+    url: "https://hips.hearstapps.com/hmg-prod/images/moraine-lake-and-the-valley-of-the-ten-peaks-in-the-royalty-free-image-1571062944.jpg?crop=0.654xw:1.00xh;0.252xw,0&resize=1200:*",
   },
   {
-    src: goldenTempleImg, // Use the variable here
-    alt: "The Golden Temple in Amritsar",
-    topCard: {
-      icon: "🌟",
-      title: "Golden Temple",
-      location: "Amritsar, Punjab",
-    },
-    bottomCard: {
-      icon: "🙏",
-      title: "Spiritual Oasis",
-      location: "Harmandir Sahib",
-    },
+    label: "Goa Coastline",
+    coords: "15.2993° N, 74.1240° E",
+    url: "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?auto=format&fit=crop&w=1920&q=80",
   },
   {
-    src: hampiImg, // Use the variable here
-    alt: "Ancient stone chariot at Hampi",
-    topCard: { icon: "🏛️", title: "Hampi Ruins", location: "Hampi, Karnataka" },
-    bottomCard: {
-      icon: "🗿",
-      title: "Historical Gem",
-      location: "Vijayanagara Empire",
-    },
+    label: "Dal Lake, Kashmir",
+    coords: "34.1237° N, 74.8237° E",
+    url: "https://thumbs.dreamstime.com/b/beautiful-view-dal-lake-winter-srinagar-kashmir-india-srinagar-kashmir-india-january-view-dal-lake-winter-224410445.jpg",
   },
 ];
 
-const LandingPage = () => {
-  const [email, setEmail] = useState("");
-  const [subscribed, setSubscribed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const navigate = useNavigate();
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+const INDIAN_STATES = [
+  "Andhra Pradesh",
+  "Arunachal Pradesh",
+  "Assam",
+  "Bihar",
+  "Chhattisgarh",
+  "Goa",
+  "Gujarat",
+  "Haryana",
+  "Himachal Pradesh",
+  "Jammu & Kashmir",
+  "Jharkhand",
+  "Karnataka",
+  "Kerala",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Manipur",
+  "Meghalaya",
+  "Mizoram",
+  "Nagaland",
+  "Odisha",
+  "Punjab",
+  "Rajasthan",
+  "Sikkim",
+  "Tamil Nadu",
+  "Telangana",
+  "Tripura",
+  "Uttar Pradesh",
+  "Uttarakhand",
+  "West Bengal",
+];
 
+// A curated handful surfaced on the homepage itself; the rest still live
+// in the full destination drawer.
+const FEATURED_STATES = [
+  "Goa",
+  "Kerala",
+  "Rajasthan",
+  "Himachal Pradesh",
+  "Jammu & Kashmir",
+  "Uttarakhand",
+  "Tamil Nadu",
+  "West Bengal",
+];
+
+const HOW_IT_WORKS = [
+  {
+    tag: "WAYPOINT 01",
+    title: "Tell us who you're building for",
+    body: "Connect your brand — hotel, DMO, or travel agency — and Traviora takes on your identity, not the other way round.",
+    icon: Building2,
+  },
+  {
+    tag: "WAYPOINT 02",
+    title: "Set the shape of the trip",
+    body: "Dates, budget, pace, interests. The traveler answers a few questions; you don't lift a finger.",
+    icon: Compass,
+  },
+  {
+    tag: "WAYPOINT 03",
+    title: "Launch a living itinerary",
+    body: "Traviora drafts a day-by-day route in seconds, ready for the traveler to reshape on the fly.",
+    icon: Route,
+  },
+];
+
+const SLIDE_INTERVAL_MS = 6000;
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// Injects the custom-scrollbar CSS and the two display fonts once into
+// <head>, no matter how many times <Home /> mounts.
+function useGlobalStyles() {
   useEffect(() => {
-    if (heroImages.length === 0) return; // Don't start the timer if there are no images
-    const timer = setInterval(() => {
-      setCurrentImageIndex((prevIndex) => (prevIndex + 1) % heroImages.length);
-    }, 5000);
-    return () => clearInterval(timer);
+    const STYLE_ID = "traviora-custom-scrollbar";
+    if (!document.getElementById(STYLE_ID)) {
+      const style = document.createElement("style");
+      style.id = STYLE_ID;
+      style.textContent = `
+        html, body { margin: 0; padding: 0; width: 100%; overflow-x: hidden; }
+        #root, #app { margin: 0; padding: 0; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(249,115,22,0.4); border-radius: 10px; }
+        .font-display { font-family: 'Fraunces', 'ui-serif', Georgia, serif; font-optical-sizing: auto; }
+        .font-mono-tag { font-family: 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: 0.08em; }
+      `;
+      document.head.appendChild(style);
+    }
+
+    const FONT_ID = "traviora-fonts";
+    if (!document.getElementById(FONT_ID)) {
+      const link = document.createElement("link");
+      link.id = FONT_ID;
+      link.rel = "stylesheet";
+      link.href =
+        "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500&display=swap";
+      document.head.appendChild(link);
+    }
   }, []);
+}
 
-  const currentImage = heroImages[currentImageIndex];
-
-  const destinations = [
-    {
-      name: "Goa",
-      image:
-        "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=800&q=80",
-      description: "Beaches, nightlife, and Portuguese heritage",
-      days: "4-6 days",
-      state: "Goa",
-    },
-    {
-      name: "Jaipur",
-      image:
-        "https://images.unsplash.com/photo-1599661046289-e31897846e41?w=800&q=80",
-      description: "Pink city with majestic forts and palaces",
-      days: "3-4 days",
-      state: "Rajasthan",
-    },
-    {
-      name: "Kerala Backwaters",
-      image:
-        "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=800&q=80",
-      description: "Serene houseboats and lush green landscapes",
-      days: "5-7 days",
-      state: "Kerala",
-    },
-    {
-      name: "Ladakh",
-      image:
-        "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80",
-      description: "Himalayan paradise with stunning monasteries",
-      days: "7-10 days",
-      state: "Ladakh",
-    },
-  ];
-
-  const steps = [
-    {
-      icon: <MapPin className="w-8 h-8" />,
-      title: "Choose Your Destination",
-      description:
-        "Select from hundreds of handpicked Indian destinations or explore offbeat locations across the country",
-    },
-    {
-      icon: <Calendar className="w-8 h-8" />,
-      title: "Plan Your Dates",
-      description:
-        "Pick your travel dates and our AI will create the perfect itinerary based on weather and local events",
-    },
-    {
-      icon: <Sparkles className="w-8 h-8" />,
-      title: "Get Your Itinerary",
-      description:
-        "Receive a detailed day-by-day plan with places to visit, local cuisine, and insider travel tips",
-    },
-  ];
-
-  const testimonials = [
-    {
-      name: "Priya Sharma",
-      location: "Mumbai, Maharashtra",
-      text: "Planning our Rajasthan trip was so easy with this platform. The itinerary included hidden gems in Jaipur and Jodhpur that we would have never discovered on our own!",
-      rating: 5,
-    },
-    {
-      name: "Arjun Patel",
-      location: "Ahmedabad, Gujarat",
-      text: "The Kerala backwaters trip was perfectly planned. Every restaurant recommendation was spot-on, and the houseboat experience was unforgettable. Highly recommend!",
-      rating: 5,
-    },
-    {
-      name: "Sneha Reddy",
-      location: "Hyderabad, Telangana",
-      text: "As someone who loves offbeat travel, this tool helped me discover amazing places in Himachal Pradesh. The detailed itinerary with timings made our trip stress-free.",
-      rating: 5,
-    },
-  ];
-
-  const handleSubscribe = () => {
-    if (email) {
-      setSubscribed(true);
-      setTimeout(() => {
-        setEmail("");
-        setSubscribed(false);
-      }, 3000);
-    }
-  };
-
-  const scrollToSection = (id) => {
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth" });
-      setMobileMenuOpen(false);
-    }
-  };
-
+// Reusable labeled input so the login/register forms don't repeat markup.
+function Field({ label, type = "text", name, autoComplete, ...rest }) {
   return (
-    <div className="min-h-screen bg-white">
-      {/* Navbar */}
-      <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-md z-50 border-b border-slate-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <button
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-              className="flex items-center space-x-3 group"
-            >
-              <div className="w-9 h-9 bg-gradient-to-br from-orange-500 via-pink-500 to-purple-600 rounded-lg transform group-hover:scale-110 transition-transform"></div>
-              <span className="text-xl font-bold bg-gradient-to-r from-orange-600 to-purple-600 bg-clip-text text-transparent">
-                Wanderly India
-              </span>
-            </button>
-
-            {/* Desktop Menu */}
-            <div className="hidden md:flex items-center space-x-8">
-              <button
-                onClick={() => scrollToSection("destinations")}
-                className="text-slate-700 hover:text-orange-600 transition font-medium"
-              >
-                Destinations
-              </button>
-              <button
-                onClick={() => scrollToSection("how-it-works")}
-                className="text-slate-700 hover:text-orange-600 transition font-medium"
-              >
-                How It Works
-              </button>
-              <button
-                onClick={() => scrollToSection("testimonials")}
-                className="text-slate-700 hover:text-orange-600 transition font-medium"
-              >
-                Reviews
-              </button>
-              <button
-                onClick={() => navigate("/itinerary")}
-                className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-pink-600 text-white rounded-full hover:shadow-lg hover:scale-105 transition-all font-medium"
-              >
-                Create Itinerary
-              </button>
-            </div>
-
-            {/* Mobile Menu Button */}
-            <button
-              className="md:hidden p-2"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            >
-              {mobileMenuOpen ? (
-                <X className="w-6 h-6" />
-              ) : (
-                <Menu className="w-6 h-6" />
-              )}
-            </button>
-          </div>
-
-          {/* Mobile Menu */}
-          {mobileMenuOpen && (
-            <div className="md:hidden py-4 border-t border-slate-200">
-              <div className="flex flex-col space-y-4">
-                <button
-                  onClick={() => scrollToSection("destinations")}
-                  className="text-slate-700 hover:text-orange-600 transition font-medium text-left"
-                >
-                  Destinations
-                </button>
-                <button
-                  onClick={() => scrollToSection("how-it-works")}
-                  className="text-slate-700 hover:text-orange-600 transition font-medium text-left"
-                >
-                  How It Works
-                </button>
-                <button
-                  onClick={() => scrollToSection("testimonials")}
-                  className="text-slate-700 hover:text-orange-600 transition font-medium text-left"
-                >
-                  Reviews
-                </button>
-                <button
-                  onClick={() => {
-                    navigate("/itinerary");
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full px-6 py-2.5 bg-gradient-to-r from-orange-500 to-pink-600 text-white rounded-full hover:shadow-lg transition font-medium"
-                >
-                  Create Itinerary
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="relative pt-24 pb-20 px-4 overflow-hidden min-h-screen flex items-center">
-        <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-pink-50 to-purple-50"></div>
-        <div className="max-w-7xl mx-auto relative z-10 w-full">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8 }}
-            >
-              {/* ... left side hero content ... */}
-              <div className="inline-block mb-4">
-                <span className="px-4 py-2 bg-orange-100 text-orange-700 rounded-full text-sm font-semibold">
-                  🇮🇳 Explore Incredible India
-                </span>
-              </div>
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-slate-900 mb-6 leading-tight">
-                Plan Your Perfect
-                <span className="block bg-gradient-to-r from-orange-600 via-pink-600 to-purple-600 bg-clip-text text-transparent mt-2">
-                  Indian Adventure
-                </span>
-              </h1>
-              <p className="text-xl text-slate-600 mb-8 leading-relaxed">
-                Discover hidden gems across India with AI-powered itineraries.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  onClick={() => navigate("/itinerary")}
-                  className="px-8 py-4 bg-gradient-to-r from-orange-500 to-pink-600 text-white rounded-full text-lg font-semibold shadow-lg hover:shadow-xl transition flex items-center justify-center space-x-2"
-                >
-                  <span>Start Planning Your Trip</span>
-                  <ArrowRight className="w-5 h-5" />
-                </motion.button>
-              </div>
-            </motion.div>
-
-            {/* MODIFIED: This section now uses optional chaining (?.) for safety */}
-            {currentImage && (
-              <motion.div
-                initial={{ opacity: 0, x: 30 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8, delay: 0.2 }}
-                className="relative hidden lg:block"
-              >
-                <div className="relative aspect-[4/5] rounded-3xl shadow-2xl overflow-hidden">
-                  <AnimatePresence>
-                    <motion.img
-                      key={currentImageIndex}
-                      src={currentImage.src}
-                      alt={currentImage.alt}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.8, ease: "easeInOut" }}
-                      className="w-full h-full object-cover absolute inset-0"
-                    />
-                  </AnimatePresence>
-                </div>
-
-                {/* Floating cards */}
-                <AnimatePresence>
-                  <motion.div
-                    key={currentImageIndex + "-top"}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                    className="absolute -top-4 -left-4 bg-white p-4 rounded-2xl shadow-xl"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-pink-500 rounded-xl flex items-center justify-center text-white text-xl">
-                        {/* FIX: Using ?. for safety */}
-                        {currentImage.topCard?.icon}
-                      </div>
-                      <div>
-                        <div className="font-semibold text-slate-900">
-                          {currentImage.topCard?.title}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {currentImage.topCard?.location}
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
-
-                <AnimatePresence>
-                  <motion.div
-                    key={currentImageIndex + "-bottom"}
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 20 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                    className="absolute -bottom-4 -right-4 bg-white p-4 rounded-2xl shadow-xl"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-blue-500 rounded-xl flex items-center justify-center text-white text-xl">
-                        {/* FIX: Using ?. for safety */}
-                        {currentImage.bottomCard?.icon}
-                      </div>
-                      <div>
-                        <div className="font-semibold text-slate-900">
-                          {currentImage.bottomCard?.title}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {currentImage.bottomCard?.location}
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
-              </motion.div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Destinations */}
-      <section id="destinations" className="py-20 px-4 bg-slate-50">
-        <div className="max-w-7xl mx-auto">
-          {/* ... content ... */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {destinations.slice(0, 4).map(
-              (
-                dest,
-                index // only showing first 4 for brevity
-              ) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 30 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: index * 0.05 }}
-                  viewport={{ once: true }}
-                  whileHover={{ y: -8 }}
-                  className="group cursor-pointer"
-                >
-                  {/* The parent container already has overflow-hidden, which is perfect! */}
-                  <div className="relative overflow-hidden rounded-2xl shadow-lg bg-white">
-                    <div className="aspect-[3/4] overflow-hidden">
-                      {/* APPLY THE CLASSES TO THIS IMG TAG 👇 */}
-                      <img
-                        src={dest.image}
-                        alt={dest.name}
-                        className="w-full h-full object-cover group-hover:scale-110 transition duration-500"
-                      />
-                    </div>
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
-                    <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
-                      <div className="text-xs font-semibold text-orange-300 mb-1">
-                        {dest.state}
-                      </div>
-                      <h3 className="text-xl font-bold mb-1">{dest.name}</h3>
-                    </div>
-                  </div>
-                </motion.div>
-              )
-            )}
-          </div>
-        </div>
-      </section>
-      {/* How It Works */}
-      <section id="how-it-works" className="py-20 px-4 bg-white">
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">
-              How It Works
-            </h2>
-            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-              Create your perfect Indian itinerary in three simple steps
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 relative">
-            <div className="hidden md:block absolute top-10 left-0 w-full h-0.5 bg-slate-200"></div>
-            <div className="hidden md:block absolute top-10 left-0 w-full">
-              <div className="h-0.5 bg-gradient-to-r from-orange-400 via-pink-400 to-purple-400 w-full"></div>
-            </div>
-
-            {steps.map((step, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.2 }}
-                viewport={{ once: true }}
-                className="text-center relative bg-white px-4"
-              >
-                <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-orange-500 via-pink-500 to-purple-600 text-white rounded-2xl mb-6 shadow-lg">
-                  {step.icon}
-                </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-3">
-                  {step.title}
-                </h3>
-                <p className="text-slate-600 leading-relaxed">
-                  {step.description}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-
-          <div className="text-center mt-16">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate("/itinerary")}
-              className="px-8 py-4 bg-gradient-to-r from-orange-500 to-pink-600 text-white rounded-full font-semibold shadow-lg hover:shadow-xl transition inline-flex items-center space-x-2"
-            >
-              <span>Get Started Now</span>
-              <ArrowRight className="w-5 h-5" />
-            </motion.button>
-          </div>
-        </div>
-      </section>
-      {/* Testimonials */}
-      <section id="testimonials" className="py-20 px-4 bg-slate-50">
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">
-              Loved by Indian Travelers
-            </h2>
-            <p className="text-lg text-slate-600">
-              See what our community has to say about their journeys
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                viewport={{ once: true }}
-                className="bg-white rounded-2xl p-8 hover:shadow-xl transition shadow-md"
-              >
-                <div className="flex mb-4">
-                  {[...Array(testimonial.rating)].map((_, i) => (
-                    <svg
-                      key={i}
-                      className="w-5 h-5 text-orange-400 fill-current"
-                      viewBox="0 0 20 20"
-                    >
-                      <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z" />
-                    </svg>
-                  ))}
-                </div>
-                <p className="text-slate-700 mb-6 leading-relaxed">
-                  {testimonial.text}
-                </p>
-                <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                    {testimonial.name.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">
-                      {testimonial.name}
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      {testimonial.location}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-      {/* Newsletter / Final CTA */}
-      <section
-        id="itinerary-section"
-        className="py-20 px-4 bg-gradient-to-br from-orange-500 via-pink-500 to-purple-600"
+    <div>
+      <label
+        htmlFor={name}
+        className="block mb-2 text-xs font-bold tracking-wider text-gray-400 uppercase"
       >
-        <div className="max-w-4xl mx-auto text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-          >
-            <h2 className="text-4xl font-bold text-white mb-4">
-              Ready to Plan Your Indian Adventure?
-            </h2>
-            <p className="text-xl text-white/90 mb-8">
-              Get weekly travel inspiration and exclusive Indian travel deals
-              delivered to your inbox.
-            </p>
-
-            <div className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto mb-8">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
-                className="flex-1 px-6 py-4 rounded-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-white"
-              />
-              <button
-                onClick={handleSubscribe}
-                className="px-8 py-4 bg-white text-pink-600 rounded-full font-semibold hover:bg-slate-100 transition flex items-center justify-center space-x-2 shadow-lg whitespace-nowrap"
-              >
-                {subscribed ? (
-                  <>
-                    <CheckCircle className="w-5 h-5" />
-                    <span>Subscribed!</span>
-                  </>
-                ) : (
-                  <>
-                    <Mail className="w-5 h-5" />
-                    <span>Subscribe</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            <p className="text-white/80 text-sm mb-6">
-              Or start creating your personalized itinerary right now
-            </p>
-
-            {/* FIX: Added the missing onClick handler to make this button functional. */}
-            <motion.button
-              onClick={() => navigate("/itinerary")}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="px-10 py-5 bg-white text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-purple-600 rounded-full font-bold text-lg shadow-xl hover:shadow-2xl transition border-2 border-white"
-            >
-              Create My Itinerary Now
-            </motion.button>
-          </motion.div>
-        </div>
-      </section>
-      {/* Footer */}
-      <footer className="bg-slate-900 text-white py-12 px-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <button
-                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-                className="flex items-center space-x-3 mb-4 group"
-              >
-                <div className="w-9 h-9 bg-gradient-to-br from-orange-500 via-pink-500 to-purple-600 rounded-lg"></div>
-                <span className="text-xl font-bold">Wanderly India</span>
-              </button>
-              <p className="text-slate-400 leading-relaxed">
-                Making Indian travel planning effortless and memorable for every
-                explorer.
-              </p>
-            </div>
-
-            <div>
-              <h4 className="font-semibold mb-4 text-white">Company</h4>
-              <ul className="space-y-2 text-slate-400">
-                {/* FIX: Changed from <button> to <a> for semantic HTML and accessibility. */}
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    About Us
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    Careers
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    Travel Blog
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    Press
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="font-semibold mb-4 text-white">Support</h4>
-              <ul className="space-y-2 text-slate-400">
-                {/* FIX: Changed from <button> to <a> for semantic HTML and accessibility. */}
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    Contact Us
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    Help Center
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    Terms of Service
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    Privacy Policy
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="font-semibold mb-4 text-white">Follow Us</h4>
-              <div className="flex space-x-4">
-                <a
-                  href="https://instagram.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center hover:bg-orange-600 transition"
-                >
-                  <Instagram className="w-5 h-5" />
-                </a>
-                <a
-                  href="https://twitter.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center hover:bg-orange-600 transition"
-                >
-                  <Twitter className="w-5 h-5" />
-                </a>
-                <a
-                  href="https://facebook.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center hover:bg-orange-600 transition"
-                >
-                  <Facebook className="w-5 h-5" />
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-slate-800 pt-8">
-            <p className="text-center text-slate-400">
-              © {new Date().getFullYear()} Wanderly India. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
+        {label}
+      </label>
+      <input
+        id={name}
+        name={name}
+        type={type}
+        autoComplete={autoComplete}
+        required
+        className="w-full px-4 py-3 text-white placeholder-gray-500 transition-colors border rounded-xl bg-white/5 border-white/10 focus:border-orange-500 focus:outline-none"
+        {...rest}
+      />
     </div>
   );
-};
+}
 
-export default LandingPage;
+function AuthModal({ mode, visible, onClose, onSwitch }) {
+  const titleId = useId();
+  const containerRef = useRef(null);
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
+  // idle | success | confirm-email
+  const [status, setStatus] = useState("idle");
+  const [pendingCreds, setPendingCreds] = useState(null);
+
+  // Reset transient state whenever the mode changes (e.g. login <-> register)
+  useEffect(() => {
+    setStatus("idle");
+    setResent(false);
+    setPendingCreds(null);
+  }, [mode]);
+
+  // Autofocus the first field, and trap Tab navigation inside the dialog.
+  useEffect(() => {
+    if (!visible) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const focusables = container.querySelectorAll(FOCUSABLE_SELECTOR);
+    focusables[0]?.focus();
+
+    function handleKeyDown(e) {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR));
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [visible, mode, onClose]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const form = new FormData(e.target);
+
+    const name = form.get("name");
+    const email = form.get("email");
+    const password = form.get("password");
+
+    setLoading(true);
+
+    try {
+      let result;
+
+      if (mode === "login") {
+        result = await signIn(email, password);
+      } else {
+        result = await signUp(name, email, password);
+      }
+
+      if (result.error) {
+        alert(result.error.message);
+        return;
+      }
+
+      if (mode === "login") {
+        setStatus("success");
+        setTimeout(() => {
+          onClose();
+          e.target.reset();
+          navigate("/trip-prep");
+        }, 1000);
+      } else {
+        // Registration succeeded, but the account still needs the traveler
+        // to confirm their email before it's usable.
+        setPendingCreds({ name, email, password });
+        setStatus("confirm-email");
+      }
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Re-sends the confirmation email. Most confirm-by-link auth backends
+  // (e.g. Supabase) re-trigger the confirmation email on a repeat sign-up
+  // for an unconfirmed address.
+  // TODO: swap for a dedicated resendConfirmation(email) call if/when
+  // authService exposes one — that's a more reliable contract than reusing
+  // signUp.
+  const handleResend = async () => {
+    if (!pendingCreds || resending) return;
+    setResending(true);
+    try {
+      await signUp(
+        pendingCreds.name,
+        pendingCreds.email,
+        pendingCreds.password,
+      );
+      setResent(true);
+      setTimeout(() => setResent(false), 4000);
+    } catch {
+      // Swallow "already registered" style errors — the goal is just to
+      // reassure the traveler a link is on its way.
+      setResent(true);
+      setTimeout(() => setResent(false), 4000);
+    } finally {
+      setResending(false);
+    }
+  };
+
+  // Once the traveler has clicked the confirmation link in their inbox,
+  // this signs them in and sends them on to trip-prep.
+  const handleContinueAfterConfirm = async () => {
+    if (!pendingCreds) return;
+    setLoading(true);
+    try {
+      const result = await signIn(pendingCreds.email, pendingCreds.password);
+      if (result.error) {
+        alert(
+          "Not confirmed just yet — open the link in your email first, then try again.",
+        );
+        return;
+      }
+      onClose();
+      navigate("/trip-prep");
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isLogin = mode === "login";
+
+  return (
+    <div
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md transition-opacity duration-300 ${
+        visible ? "opacity-100" : "pointer-events-none opacity-0"
+      }`}
+    >
+      <div
+        ref={containerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className={`relative w-full max-w-md transform rounded-3xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl transition-all duration-300 ${
+          visible ? "scale-100" : "scale-95"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute p-2 text-xl text-gray-400 top-4 right-4 hover:text-white"
+        >
+          <X size={20} />
+        </button>
+
+        {status === "success" && (
+          <div className="flex flex-col items-center py-8 text-center">
+            <span className="flex items-center justify-center w-14 h-14 mb-4 rounded-full bg-orange-600/20">
+              <Check size={28} className="text-orange-500" />
+            </span>
+            <h2 className="text-xl font-bold text-white">Welcome back!</h2>
+            <p className="mt-2 text-sm text-gray-400">
+              Taking you to trip prep…
+            </p>
+          </div>
+        )}
+
+        {status === "confirm-email" && (
+          <div className="flex flex-col items-center py-4 text-center">
+            <span className="flex items-center justify-center w-14 h-14 mb-4 rounded-full bg-orange-600/20">
+              <Mail size={26} className="text-orange-500" />
+            </span>
+            <h2 id={titleId} className="text-xl font-bold text-white">
+              Confirm your email
+            </h2>
+            <p className="max-w-xs mt-2 text-sm text-gray-400">
+              We've sent a confirmation link to{" "}
+              <span className="font-semibold text-gray-200">
+                {pendingCreds?.email}
+              </span>
+              . Open it, then come back here to continue.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleContinueAfterConfirm}
+              disabled={loading}
+              className="w-full py-3 mt-6 font-bold text-white transition bg-orange-600 shadow-lg rounded-xl shadow-orange-600/20 hover:bg-orange-700 disabled:opacity-60"
+            >
+              {loading ? "Checking…" : "I've confirmed — Continue"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={resending}
+              className="mt-3 text-xs font-semibold text-gray-400 hover:text-orange-400 disabled:opacity-60"
+            >
+              {resending
+                ? "Sending…"
+                : resent
+                  ? "Sent — check your inbox"
+                  : "Resend confirmation email"}
+            </button>
+          </div>
+        )}
+
+        {status === "idle" && (
+          <>
+            <h2
+              id={titleId}
+              className="mb-2 text-3xl font-extrabold text-white"
+            >
+              {isLogin ? "Welcome Back" : "Create Account"}
+            </h2>
+            <p className="mb-6 text-sm text-gray-400">
+              {isLogin
+                ? "Login to access your personalized smart itineraries."
+                : "Sign up to begin designing custom trip routes instantly."}
+            </p>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {!isLogin && (
+                <Field
+                  label="Full Name"
+                  name="name"
+                  autoComplete="name"
+                  placeholder="John Doe"
+                />
+              )}
+              <Field
+                label="Email Address"
+                type="email"
+                name="email"
+                autoComplete="email"
+                placeholder="name@example.com"
+              />
+              <Field
+                label="Password"
+                type="password"
+                name="password"
+                autoComplete={isLogin ? "current-password" : "new-password"}
+                placeholder="••••••••"
+              />
+
+              {isLogin ? (
+                <div className="text-right">
+                  <a
+                    href="#forgot-password"
+                    className="text-xs text-orange-400 hover:underline"
+                  >
+                    Forgot password?
+                  </a>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    required
+                    id="terms"
+                    className="accent-orange-500"
+                  />
+                  <label htmlFor="terms" className="text-xs text-gray-400">
+                    I agree to the Terms of Service & Privacy Policy
+                  </label>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 mt-2 font-bold text-white transition bg-orange-600 shadow-lg rounded-xl shadow-orange-600/20 hover:bg-orange-700 disabled:opacity-60"
+              >
+                {loading ? "Please wait..." : isLogin ? "Sign In" : "Sign Up"}
+              </button>
+            </form>
+
+            <p className="mt-6 text-sm text-center text-gray-400">
+              {isLogin ? "Don't have an account?" : "Already have an account?"}
+              <button
+                type="button"
+                onClick={() => onSwitch(isLogin ? "register" : "login")}
+                className="ml-1 font-semibold text-orange-400 hover:underline"
+              >
+                {isLogin ? "Register instead" : "Login instead"}
+              </button>
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// The small mono-font tag pinned over the hero carousel. It reads like a
+// waypoint marker on a route — grounding "AI itinerary builder" in an
+// actual coordinate rather than a generic badge.
+function WaypointTag({ slide, index, total }) {
+  return (
+    <div className="items-center hidden gap-3 px-4 py-2 border rounded-full sm:inline-flex border-white/15 bg-black/30 backdrop-blur-sm font-mono-tag">
+      <span className="text-orange-400">
+        {String(index + 1).padStart(2, "0")}/{String(total).padStart(2, "0")}
+      </span>
+      <span className="w-px h-3 bg-white/20" aria-hidden="true" />
+      <span className="text-gray-200">{slide.label}</span>
+      <span className="w-px h-3 bg-white/20" aria-hidden="true" />
+      <span className="text-gray-400">{slide.coords}</span>
+    </div>
+  );
+}
+
+function SectionEyebrow({ children }) {
+  return (
+    <span className="inline-block mb-4 text-xs font-semibold tracking-[0.2em] text-orange-400 uppercase font-mono-tag">
+      {children}
+    </span>
+  );
+}
+
+export default function Home() {
+  const [slideIndex, setSlideIndex] = useState(0);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [destinationOpen, setDestinationOpen] = useState(false);
+  const [authMode, setAuthMode] = useState(null); // null | 'login' | 'register'
+  const [modalVisible, setModalVisible] = useState(false);
+  const closeTimeout = useRef(null);
+  const navigate = useNavigate();
+
+  useGlobalStyles();
+
+  // Background slideshow rotation — paused while a modal/drawer is open so
+  // it doesn't steal attention or fight for GPU with open transitions.
+  useEffect(() => {
+    if (drawerOpen || authMode) return;
+    const timer = setInterval(() => {
+      setSlideIndex((prev) => (prev + 1) % SLIDES.length);
+    }, SLIDE_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [drawerOpen, authMode]);
+
+  // Lock body scroll while the drawer or modal is open.
+  useEffect(() => {
+    document.body.style.overflow = drawerOpen || authMode ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [drawerOpen, authMode]);
+
+  // Escape closes the drawer too (the modal handles its own Escape key).
+  useEffect(() => {
+    if (!drawerOpen || authMode) return;
+    function handleKeyDown(e) {
+      if (e.key === "Escape") setDrawerOpen(false);
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [drawerOpen, authMode]);
+
+  const closeDrawer = useCallback(() => {
+    setDrawerOpen(false);
+    setDestinationOpen(false);
+  }, []);
+
+  const openAuth = useCallback((mode) => {
+    if (closeTimeout.current) clearTimeout(closeTimeout.current);
+    setAuthMode(mode);
+    requestAnimationFrame(() => setModalVisible(true));
+  }, []);
+
+  const closeAuth = useCallback(() => {
+    setModalVisible(false);
+    closeTimeout.current = setTimeout(() => setAuthMode(null), 150);
+  }, []);
+
+  useEffect(
+    () => () => closeTimeout.current && clearTimeout(closeTimeout.current),
+    [],
+  );
+
+  const currentSlide = SLIDES[slideIndex];
+
+  return (
+    <div className="relative min-h-screen overflow-x-hidden font-sans text-white bg-gray-900 select-none">
+      {/* Background Carousel */}
+      <div className="fixed inset-0 z-0" aria-hidden="true">
+        {SLIDES.map((slide, i) => (
+          <div
+            key={slide.url}
+            className="absolute inset-0 bg-center bg-cover transition-opacity duration-1000 ease-in-out"
+            style={{
+              backgroundImage: `linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)), url('${slide.url}')`,
+              opacity: i === slideIndex ? 1 : 0,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Header / Navbar */}
+      <header className="absolute top-0 left-0 z-40 w-full p-6 bg-transparent">
+        <div className="flex items-center justify-between mx-auto max-w-7xl">
+          <div className="text-2xl font-black tracking-wider text-white font-display">
+            Traviora
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-4">
+            <InstallPWAButton variant="link" />
+
+            <button
+              type="button"
+              onClick={() => navigate("/profile")}
+              aria-label="Go to profile"
+              className="p-2 transition rounded-full hover:bg-white/10 hover:text-orange-500"
+            >
+              <User size={22} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Open menu"
+              aria-expanded={drawerOpen}
+              className="p-2 text-2xl transition hover:text-orange-500"
+            >
+              <Menu size={26} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Side Drawer Navigation */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Site navigation"
+        aria-hidden={!drawerOpen}
+        className={`fixed top-0 right-0 z-50 h-full w-80 transform overflow-y-auto border-l border-white/10 bg-black/95 shadow-2xl transition-transform duration-300 custom-scrollbar ${
+          drawerOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="flex justify-end p-6">
+          <button
+            type="button"
+            onClick={closeDrawer}
+            aria-label="Close menu"
+            className="p-2 text-2xl text-gray-400 hover:text-white"
+          >
+            <X size={24} />
+          </button>
+        </div>
+        <nav className="flex flex-col px-8 mt-6 space-y-5 text-sm font-bold tracking-widest uppercase">
+          <a
+            href="#home"
+            onClick={closeDrawer}
+            className="text-orange-500 transition"
+          >
+            HOME
+          </a>
+          <a
+            href="#how-it-works"
+            onClick={closeDrawer}
+            className="text-gray-300 transition hover:text-orange-500"
+          >
+            HOW IT WORKS
+          </a>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setDestinationOpen((prev) => !prev)}
+              aria-expanded={destinationOpen}
+              className="flex items-center justify-between w-full text-gray-300 transition hover:text-orange-500"
+            >
+              <span>DESTINATION</span>
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-300 ${destinationOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {destinationOpen && (
+              <div className="flex flex-col pl-4 mt-3 space-y-3 text-xs font-semibold tracking-normal text-gray-400 normal-case border-l max-h-64 overflow-y-auto border-white/10 custom-scrollbar">
+                {INDIAN_STATES.map((state) => (
+                  <a
+                    key={state}
+                    href={`#${state.toLowerCase().replace(/\s+&?\s*/g, "-")}`}
+                    onClick={closeDrawer}
+                    className="transition hover:text-white"
+                  >
+                    {state}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <a
+            href="#about"
+            onClick={closeDrawer}
+            className="text-gray-300 transition hover:text-orange-500"
+          >
+            ABOUT
+          </a>
+        </nav>
+      </div>
+      {drawerOpen && (
+        <div
+          onClick={closeDrawer}
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+        />
+      )}
+
+      {/* Hero Pitch */}
+      <main
+        id="home"
+        className="relative z-30 flex flex-col items-center justify-center min-h-screen px-4 pt-24 pb-16 text-center"
+      >
+        <div className="max-w-4xl space-y-8">
+          <WaypointTag
+            slide={currentSlide}
+            index={slideIndex}
+            total={SLIDES.length}
+          />
+
+          <h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl font-display">
+            An AI Itinerary Builder <br /> For Your Website
+          </h1>
+          <p className="max-w-2xl mx-auto text-base text-gray-200 md:text-lg">
+            A white-label AI itinerary builder designed for destination
+            organizations, hotels, and travel brands. Deliver personalized
+            travel experiences.
+          </p>
+
+          <div className="flex items-center justify-center gap-4 pt-4">
+            <button
+              type="button"
+              onClick={() => openAuth("login")}
+              className="min-w-[140px] rounded-xl border border-white/20 bg-white/10 px-8 py-3 font-bold text-white transition duration-300 backdrop-blur-xs hover:bg-white/20"
+            >
+              Login
+            </button>
+            <button
+              type="button"
+              onClick={() => openAuth("register")}
+              className="min-w-[140px] rounded-xl bg-orange-600 px-8 py-3 font-bold text-white shadow-lg shadow-orange-600/20 transition duration-300 hover:bg-orange-700"
+            >
+              Register User
+            </button>
+          </div>
+        </div>
+
+        {/* Scroll cue */}
+        <a
+          href="#how-it-works"
+          aria-label="Scroll to how it works"
+          className="absolute hidden -translate-x-1/2 sm:flex bottom-8 left-1/2 animate-bounce"
+        >
+          <ChevronDown className="text-white/60" size={28} />
+        </a>
+      </main>
+
+      {/* How It Works */}
+      <section
+        id="how-it-works"
+        className="relative z-30 px-6 py-24 bg-gray-950 border-t border-white/10"
+      >
+        <div className="mx-auto text-center max-w-7xl">
+          <SectionEyebrow>The Route To Launch</SectionEyebrow>
+          <h2 className="max-w-2xl mx-auto text-3xl font-bold sm:text-4xl font-display">
+            Three waypoints between sign-up and a live itinerary
+          </h2>
+        </div>
+
+        <div className="relative grid max-w-5xl grid-cols-1 gap-10 mx-auto mt-16 md:grid-cols-3">
+          {/* connecting route line, desktop only */}
+          <div
+            aria-hidden="true"
+            className="absolute hidden h-px border-t border-dashed md:block top-8 left-[16.5%] right-[16.5%] border-orange-500/30"
+          />
+          {HOW_IT_WORKS.map(({ tag, title, body, icon: Icon }) => (
+            <motion.div
+              key={tag}
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: 0.5 }}
+              className="relative flex flex-col items-center px-4 text-center"
+            >
+              <span className="relative z-10 flex items-center justify-center w-16 h-16 mb-6 border rounded-full bg-gray-900 border-orange-500/40">
+                <Icon size={26} className="text-orange-400" />
+              </span>
+              <span className="mb-2 text-xs font-semibold text-orange-400 font-mono-tag">
+                {tag}
+              </span>
+              <h3 className="mb-2 text-lg font-bold text-white">{title}</h3>
+              <p className="text-sm text-gray-400">{body}</p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      {/* Built for travel brands */}
+      <section className="relative z-30 px-6 py-24 border-t bg-gray-900 border-white/10">
+        <div className="grid max-w-6xl gap-12 mx-auto md:grid-cols-2 md:items-center">
+          <div>
+            <SectionEyebrow>Built White-Label</SectionEyebrow>
+            <h2 className="mb-4 text-3xl font-bold sm:text-4xl font-display">
+              Your brand up front. Traviora underneath.
+            </h2>
+            <p className="mb-6 text-gray-400">
+              Every itinerary, email, and confirmation screen carries your name
+              — travelers never see "Traviora" unless you want them to.
+            </p>
+            <ul className="space-y-4 text-sm">
+              <li className="flex items-start gap-3">
+                <Check size={18} className="mt-0.5 text-orange-500 shrink-0" />
+                <span className="text-gray-300">
+                  Every Indian state covered, day one — no region left unmapped.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check size={18} className="mt-0.5 text-orange-500 shrink-0" />
+                <span className="text-gray-300">
+                  Drop-in embed, so it lives on your site instead of sending
+                  travelers elsewhere.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check size={18} className="mt-0.5 text-orange-500 shrink-0" />
+                <span className="text-gray-300">
+                  Installable as an app, so returning travelers open it like any
+                  other icon on their phone.
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="relative overflow-hidden border rounded-3xl border-white/10 aspect-square md:aspect-auto md:h-96">
+            <img
+              src={SLIDES[2].url}
+              alt="Goa coastline, one of the destinations Traviora can route travelers to"
+              className="object-cover w-full h-full"
+              loading="lazy"
+            />
+            <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+              <span className="text-xs font-mono-tag text-gray-300">
+                {SLIDES[2].label} · {SLIDES[2].coords}
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Explore by state */}
+      <section
+        id="about"
+        className="relative z-30 px-6 py-24 border-t bg-gray-950 border-white/10"
+      >
+        <div className="mx-auto text-center max-w-7xl">
+          <SectionEyebrow>Destinations</SectionEyebrow>
+          <h2 className="max-w-2xl mx-auto text-3xl font-bold sm:text-4xl font-display">
+            Wherever your travelers are headed, there's already a route
+          </h2>
+        </div>
+
+        <div className="grid max-w-5xl grid-cols-2 gap-4 mx-auto mt-14 sm:grid-cols-4">
+          {FEATURED_STATES.map((state) => (
+            <a
+              key={state}
+              href={`#${state.toLowerCase().replace(/\s+&?\s*/g, "-")}`}
+              className="px-4 py-5 text-sm font-semibold text-center transition border rounded-2xl border-white/10 bg-white/5 hover:border-orange-500/50 hover:bg-white/10"
+            >
+              {state}
+            </a>
+          ))}
+        </div>
+
+        <div className="mt-8 text-center">
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            className="text-sm font-semibold text-orange-400 hover:underline"
+          >
+            See all {INDIAN_STATES.length} states →
+          </button>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="relative z-30 px-6 py-24 text-center border-t bg-gray-900 border-white/10">
+        <div className="max-w-2xl mx-auto">
+          <h2 className="mb-4 text-3xl font-bold sm:text-4xl font-display">
+            Ready to put a route in front of your travelers?
+          </h2>
+          <p className="mb-8 text-gray-400">
+            Register your brand and have a live itinerary builder embedded
+            before the day is out.
+          </p>
+          <button
+            type="button"
+            onClick={() => openAuth("register")}
+            className="rounded-xl bg-orange-600 px-8 py-3.5 font-bold text-white shadow-lg shadow-orange-600/20 transition duration-300 hover:bg-orange-700"
+          >
+            Register User
+          </button>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="relative z-30 px-6 py-10 border-t bg-gray-950 border-white/10">
+        <div className="flex flex-col items-center justify-between max-w-7xl mx-auto gap-4 text-sm text-gray-500 sm:flex-row">
+          <span className="font-display text-lg font-black text-white">
+            Traviora
+          </span>
+          <nav className="flex gap-6">
+            <a href="#home" className="hover:text-orange-400">
+              Home
+            </a>
+            <a href="#how-it-works" className="hover:text-orange-400">
+              How it works
+            </a>
+            <a href="#about" className="hover:text-orange-400">
+              Destinations
+            </a>
+          </nav>
+          <span>© {new Date().getFullYear()} Traviora</span>
+        </div>
+      </footer>
+
+      {authMode && (
+        <AuthModal
+          mode={authMode}
+          visible={modalVisible}
+          onClose={closeAuth}
+          onSwitch={(mode) => setAuthMode(mode)}
+        />
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register Account - Smart Travel Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="overflow-hidden font-sans text-white bg-gray-900 flex items-center justify-center min-h-screen relative">
+
+    <div class="slideshow-container">
+        <div class="slide" style="background-image: linear-gradient(rgba(0,0,0,0.65), rgba(0,0,0,0.65)), url('https://images.unsplash.com/photo-1506929562872-bb421503ef21?auto=format&fit=crop&w=1920&q=80');"></div>
+        <div class="slide" style="background-image: linear-gradient(rgba(0,0,0,0.65), rgba(0,0,0,0.65)), url('https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1920&q=80');"></div>
+    </div>
+
+    <header class="absolute top-0 left-0 w-full p-6 z-40 bg-transparent">
+        <div class="flex items-center justify-between mx-auto max-w-7xl">
+            <a href="index.html" class="text-orange-500 hover:text-orange-400 transition-all duration-300 hover:scale-110 text-3xl">
+                <i class="fas fa-compass"></i>
+            </a>
+            <button id="menu-toggle" class="text-2xl transition-all duration-300 hover:text-orange-500 hover:rotate-90 p-2">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </header>
+
+    <div id="side-drawer" class="fixed top-0 right-0 z-50 h-full transition-transform duration-300 transform translate-x-full bg-black/95 w-80 shadow-2xl border-l border-white/10">
+        <div class="flex justify-end p-6"><button id="menu-close" class="text-2xl text-gray-400 hover:text-white p-2 transition-transform hover:rotate-90"><i class="fas fa-times"></i></button></div>
+        <nav class="flex flex-col px-10 mt-12 space-y-6 text-xl font-medium tracking-wide">
+            <a href="index.html" class="text-gray-300 hover:text-orange-500 transition-colors"><i class="w-8 fas fa-home text-sm"></i> HOME</a>
+            <a href="#" class="text-gray-300 hover:text-orange-500 transition-colors"><i class="w-8 fas fa-info-circle text-sm"></i> ABOUT</a>
+            <a href="#" class="text-gray-300 hover:text-orange-500 transition-colors"><i class="w-8 fas fa-map-marker-alt text-sm"></i> DESTINATION</a>
+            <a href="#" class="text-gray-300 hover:text-orange-500 transition-colors"><i class="w-8 fas fa-route text-sm"></i> HOW IT WORKS</a>
+        </nav>
+    </div>
+    <div id="drawer-overlay" class="fixed inset-0 z-40 hidden bg-black/60 backdrop-blur-xs"></div>
+
+    <div class="relative z-30 w-full max-w-md mx-4 p-8 bg-white/[0.06] backdrop-blur-xl rounded-3xl border border-white/15 shadow-2xl transition-all duration-500 hover:border-white/25 hover:shadow-white/5 hover:shadow-2xl">
+        <h2 class="text-3xl font-extrabold text-center mb-2 tracking-tight bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">Create Account</h2>
+        <p class="text-gray-400 text-center text-sm mb-6">Join us to craft personalized AI travel itineraries</p>
+        
+        <form class="space-y-4" onsubmit="event.preventDefault();">
+            <div class="group">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5 transition-colors group-focus-within:text-orange-400">Full Name</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-500 group-focus-within:text-orange-500 transition-colors">
+                        <i class="fas fa-user"></i>
+                    </span>
+                    <input type="text" placeholder="Your name" class="w-full pl-11 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-orange-500 focus:bg-white/10 text-white transition-all duration-300 placeholder-gray-500 ring-0 focus:ring-2 focus:ring-orange-500/20" required>
+                </div>
+            </div>
+            <div class="group">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5 transition-colors group-focus-within:text-orange-400">Email Address</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-500 group-focus-within:text-orange-500 transition-colors">
+                        <i class="fas fa-envelope"></i>
+                    </span>
+                    <input type="email" placeholder="name@example.com" class="w-full pl-11 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-orange-500 focus:bg-white/10 text-white transition-all duration-300 placeholder-gray-500 ring-0 focus:ring-2 focus:ring-orange-500/20" required>
+                </div>
+            </div>
+            <div class="group">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5 transition-colors group-focus-within:text-orange-400">Password</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-500 group-focus-within:text-orange-500 transition-colors">
+                        <i class="fas fa-lock"></i>
+                    </span>
+                    <input type="password" placeholder="••••••••" class="w-full pl-11 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-orange-500 focus:bg-white/10 text-white transition-all duration-300 placeholder-gray-500 ring-0 focus:ring-2 focus:ring-orange-500/20" required>
+                </div>
+            </div>
+            <div class="flex items-start text-xs text-gray-400 pt-1">
+                <label class="flex items-start space-x-2 cursor-pointer group select-none">
+                    <input type="checkbox" class="mt-0.5 w-4 h-4 rounded accent-orange-500 bg-white/5 border-white/10 transition-transform group-hover:scale-105" required> 
+                    <span class="group-hover:text-gray-300 transition-colors">I agree to the <a href="#" class="text-orange-400 hover:underline">Terms of Service</a> and <a href="#" class="text-orange-400 hover:underline">Privacy Policy</a></span>
+                </label>
+            </div>
+            <button type="submit" class="w-full py-3 mt-4 font-bold text-black bg-white rounded-xl hover:bg-gray-100 active:scale-98 transition-all duration-300 shadow-xl transform hover:-translate-y-0.5">
+                Register Platform
+            </button>
+        </form>
+        
+        <p class="mt-5 text-center text-sm text-gray-400">Already have an account? <a href="login.html" class="text-orange-400 hover:text-orange-300 hover:underline font-semibold transition-colors">Log in</a></p>
+    </div>
+
+    <script src="assets/javascript/main.js"></script>
+</body>
+</html>

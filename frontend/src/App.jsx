@@ -1,35 +1,35 @@
 import "./App.css";
-import {
-  BrowserRouter as Router,
-  Route,
-  Routes,
-} from "react-router-dom";
+import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 
-import LandingPage from "./pages/Home.jsx";
-import ItineraryCreationPage from "./pages/ItineraryPage.jsx";
-import TestItinerary from "./pages/TestItinerary.jsx";
-import RouteValidation from "./pages/RouteValidation.jsx";
-import TravelMode from "./pages/TravelMode.jsx";
+import Home from "./pages/Home.jsx";
+import ItineraryCreationPage from "./pages/extra/ItineraryPage.jsx";
+import TestItinerary from "./pages/test/TestItinerary.jsx";
+import RouteValidation from "./pages/test/RouteValidation.jsx";
 import TripConfiguration from "./pages/TripConfiguration.jsx";
 import ItineraryGeneration from "./pages/ItineraryGeneration.jsx";
+
+import DestinationPage from "./pages/DestinationPage.jsx";
 
 import TripPreparation from "./pages/TripPreparation.jsx";
 
 function App() {
-
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/itinerary" element={<ItineraryCreationPage />} />
-        <Route path="/test" element={<TestItinerary />} /> 
-        <Route path="/validate" element={<RouteValidation />} />
-        <Route path="/travel-mode" element={<TravelMode />} />
-        <Route path="/trip-configuration" element={<TripConfiguration />} />
-        <Route path="/itinerary-generation" element={<ItineraryGeneration />} />
+      <Routes>        
+        <Route path="/itinerary" element={<ItineraryCreationPage />} />        
+        <Route path="/destination" element={<DestinationPage />} />
 
+        //0
+        <Route path="/" element={<Home />} />{" "}
+        //1
         <Route path="/trip-prep" element={<TripPreparation />} />
-
+        //2
+        <Route path="/trip-configuration" element={<TripConfiguration />} />
+        //3
+        <Route path="/itinerary-generation" element={<ItineraryGeneration />} />
+        //test
+        <Route path="/test" element={<TestItinerary />} />
+        <Route path="/validate" element={<RouteValidation />} />
       </Routes>
     </Router>
   );

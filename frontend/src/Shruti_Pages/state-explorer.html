@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explore Destinations - Traviora</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .font-serif-cinematic { font-family: 'Playfair Display', serif; font-style: italic; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(249,115,22,0.4); border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 selection:bg-orange-500/30 overflow-x-hidden antialiased">
+
+    <!-- Cinematic Hero Image Header Block Area -->
+    <div id="state-hero-bg" class="w-full h-[60vh] bg-cover bg-center relative flex items-center justify-center transition-all duration-1000">
+        <div class="absolute inset-0 bg-gradient-to-b from-black/50 via-black/20 to-gray-50"></div>
+        
+        <header class="absolute top-0 left-0 z-40 w-full p-8 transparent">
+            <div class="flex items-center justify-between mx-auto max-w-7xl">
+                <a href="index.html" class="text-white hover:text-orange-500 transition-colors text-2xl font-black tracking-tight">
+                    Traviora
+                </a>
+                <button id="menu-toggle" class="text-white hover:text-orange-500 transition p-2"><i class="fas fa-bars text-xl"></i></button>
+            </div>
+        </header>
+
+        <div class="relative z-30 text-center px-4 w-full max-w-5xl">
+            <h1 id="state-title" class="font-serif-cinematic text-5xl md:text-9xl leading-none text-white drop-shadow-2xl capitalize tracking-wide">
+                Explore
+            </h1>
+        </div>
+    </div>
+
+    <!-- Sidebar Drawer System Block -->
+    <div id="side-drawer" class="fixed top-0 right-0 z-50 h-full transition-transform duration-300 transform translate-x-full bg-black/95 w-80 shadow-2xl border-l border-white/10 overflow-y-auto custom-scrollbar">
+        <div class="flex justify-end p-8"><button id="menu-close" class="text-xl text-gray-400 hover:text-white transition p-2"><i class="fas fa-times"></i></button></div>
+        <nav class="flex flex-col px-8 space-y-6 text-sm font-bold tracking-widest uppercase text-white">
+            <a href="index.html" class="text-gray-400 hover:text-orange-500 transition">HOME</a>
+            <a href="#" class="text-gray-400 hover:text-orange-500 transition">ABOUT</a>
+            
+            <div class="pt-2">
+                <button id="destination-toggle" class="w-full flex items-center justify-between text-orange-500 transition-colors focus:outline-none">
+                    <span>DESTINATIONS</span>
+                    <i class="fas fa-chevron-down text-xs transition-transform duration-300"></i>
+                </button>
+                
+                <div id="state-submenu" class="hidden flex flex-col pl-4 mt-4 space-y-3.5 border-l border-white/10 text-xs font-semibold text-gray-400 max-h-64 overflow-y-auto custom-scrollbar normal-case tracking-normal">
+                    <a href="#" data-state="andhra-pradesh" class="state-link hover:text-white transition">Andhra Pradesh</a>
+                    <a href="#" data-state="arunachal-pradesh" class="state-link hover:text-white transition">Arunachal Pradesh</a>
+                    <a href="#" data-state="assam" class="state-link hover:text-white transition">Assam</a>
+                    <a href="#" data-state="bihar" class="state-link hover:text-white transition">Bihar</a>
+                    <a href="#" data-state="chhattisgarh" class="state-link hover:text-white transition">Chhattisgarh</a>
+                    <a href="#" data-state="goa" class="state-link hover:text-white transition">Goa</a>
+                    <a href="#" data-state="gujarat" class="state-link hover:text-white transition">Gujarat</a>
+                    <a href="#" data-state="haryana" class="state-link hover:text-white transition">Haryana</a>
+                    <a href="#" data-state="himachal-pradesh" class="state-link hover:text-white transition">Himachal Pradesh</a>
+                    <a href="#" data-state="jammu-kashmir" class="state-link hover:text-white transition">Jammu & Kashmir</a>
+                    <a href="#" data-state="jharkhand" class="state-link hover:text-white transition">Jharkhand</a>
+                    <a href="#" data-state="karnataka" class="state-link hover:text-white transition">Karnataka</a>
+                    <a href="#" data-state="kerala" class="state-link hover:text-white transition">Kerala</a>
+                    <a href="#" data-state="madhya-pradesh" class="state-link hover:text-white transition">Madhya Pradesh</a>
+                    <a href="#" data-state="maharashtra" class="state-link hover:text-white transition">Maharashtra</a>
+                    <a href="#" data-state="manipur" class="state-link hover:text-white transition">Manipur</a>
+                    <a href="#" data-state="meghalaya" class="state-link hover:text-white transition">Meghalaya</a>
+                    <a href="#" data-state="mizoram" class="state-link hover:text-white transition">Mizoram</a>
+                    <a href="#" data-state="nagaland" class="state-link hover:text-white transition">Nagaland</a>
+                    <a href="#" data-state="odisha" class="state-link hover:text-white transition">Odisha</a>
+                    <a href="#" data-state="punjab" class="state-link hover:text-white transition">Punjab</a>
+                    <a href="#" data-state="rajasthan" class="state-link hover:text-white transition">Rajasthan</a>
+                    <a href="#" data-state="sikkim" class="state-link hover:text-white transition">Sikkim</a>
+                    <a href="#" data-state="tamil-nadu" class="state-link hover:text-white transition">Tamil Nadu</a>
+                    <a href="#" data-state="telangana" class="state-link hover:text-white transition">Telangana</a>
+                    <a href="#" data-state="tripura" class="state-link hover:text-white transition">Tripura</a>
+                    <a href="#" data-state="uttar-pradesh" class="state-link hover:text-white transition">Uttar Pradesh</a>
+                    <a href="#" data-state="uttarakhand" class="state-link hover:text-white transition">Uttarakhand</a>
+                    <a href="#" data-state="west-bengal" class="state-link hover:text-white transition">West Bengal</a>
+                </div>
+            </div>
+        </nav>
+    </div>
+    <div id="drawer-overlay" class="fixed inset-0 z-40 hidden bg-black/50 backdrop-blur-xs"></div>
+
+    <!-- Description Details Light Theme Split Area Block -->
+    <main class="max-w-7xl mx-auto px-6 py-16 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+        <div class="lg:col-span-4 space-y-4 lg:sticky lg:top-12">
+            <div>
+                <span class="text-xs font-bold tracking-widest text-orange-600 uppercase">EXPLORING REGION</span>
+                <h2 id="state-badge-title" class="font-serif-cinematic text-4xl lg:text-6xl text-gray-900 capitalize">State</h2>
+            </div>
+        </div>
+        <div class="lg:col-span-8">
+            <p id="state-desc" class="text-lg text-gray-600 leading-relaxed font-normal">Loading travel information landscape details...</p>
+        </div>
+    </main>
+
+    <!-- Destination Dynamic Card Grid Container System -->
+    <section class="max-w-7xl mx-auto px-6 pb-32">
+        <div class="border-t border-gray-200 pt-12">
+            <div class="grid grid-cols-1 gap-12" id="places-grid">
+                <!-- Cards mounted dynamically by main.js template compiler engine -->
+            </div>
+        </div>
+    </section>
+
+    <script src="assets/javascript/database.js"></script>
+    <script src="assets/javascript/main.js"></script>
+</body>
+</html>

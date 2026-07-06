@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traviora Admin - Travel Metrics & Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-950 text-slate-100 font-sans min-h-screen p-6 md:p-10">
+
+    <header class="max-w-7xl mx-auto border-b border-slate-800 pb-6 mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <h1 class="text-3xl font-black tracking-tight text-orange-500">Traviora Central Control</h1>
+            <p class="text-sm text-slate-400 mt-1">Platform telemetry metrics: peak booking times, demographic distributions, and destination metrics.</p>
+        </div>
+        <div id="connection-badge" class="flex items-center gap-3 bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl text-xs text-slate-400">
+            <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+            Detecting Cloud Ecosystem...
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        
+        <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-md shadow-xl flex flex-col justify-between">
+            <div>
+                <h3 class="text-md font-bold text-slate-200">Peak Booking Activity</h3>
+                <p class="text-xs text-slate-400 mb-6">Aggregated user activity metrics grouped by hour interval slots.</p>
+            </div>
+            <div class="relative w-full h-48">
+                <canvas id="peakHoursChart"></canvas>
+            </div>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-md shadow-xl flex flex-col justify-between">
+            <div>
+                <h3 class="text-md font-bold text-slate-200">User Regional Demographics</h3>
+                <p class="text-xs text-slate-400 mb-6">Top domestic user distributions mapped directly from Supabase user logs.</p>
+            </div>
+            <div class="relative w-full h-48 flex items-center justify-center">
+                <canvas id="demographicsChart"></canvas>
+            </div>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-md shadow-xl flex flex-col justify-between">
+            <div>
+                <h3 class="text-md font-bold text-slate-200">Popular Travel Targets</h3>
+                <p class="text-xs text-slate-400 mb-6">Total number of digital itineraries generated across regional states.</p>
+            </div>
+            <div class="relative w-full h-48">
+                <canvas id="destinationsChart"></canvas>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // Update to match credentials used in auth-handler.js
+        const SUPABASE_URL = "https://your-project-id.supabase.co";
+        const SUPABASE_ANON_KEY = "your-actual-anon-public-key-here";
+
+        async function loadLiveDashboard() {
+            const badge = document.getElementById("connection-badge");
+            let summaryData = {};
+
+            try {
+                // 1. Fetch ALL users directly from Supabase to compute live demographics
+                const usersResponse = await fetch(`${SUPABASE_URL}/rest/v1/users?select=location`, {
+                    method: 'GET',
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    }
+                });
+
+                // 2. Fetch destination click tracking analytics from Supabase 
+                const trackingResponse = await fetch(`${SUPABASE_URL}/rest/v1/destination_analytics?select=state`, {
+                    method: 'GET',
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    }
+                });
+
+                if (!usersResponse.ok || !trackingResponse.ok) throw new Error("Supabase cloud endpoints unreachable");
+
+                const usersList = await usersResponse.json();
+                const trackingList = await trackingResponse.json();
+
+                // Build live cloud demographics map object from database records row values
+                const cloudDemographics = {};
+                usersList.forEach(user => {
+                    if (user.location) {
+                        cloudDemographics[user.location] = (cloudDemographics[user.location] || 0) + 1;
+                    }
+                });
+
+                // Build live cloud destination popularity hits counter map object
+                const cloudHits = {};
+                trackingList.forEach(item => {
+                    if (item.state) {
+                        cloudHits[item.state] = (cloudHits[item.state] || 0) + 1;
+                    }
+                });
+
+                // Read chronological local metrics fallback arrays securely
+                const liveHours = JSON.parse(localStorage.getItem("booking_hours")) || { "12:00 PM": 1 };
+
+                summaryData = {
+                    peak_hours: Object.keys(liveHours).map(time => ({ label: time, total: liveHours[time] })),
+                    demographics: Object.keys(cloudDemographics).map(region => ({ region: region, value: cloudDemographics[region] })),
+                    destinations: Object.keys(cloudHits).map(state => ({ state: state, hits: cloudHits[state] }))
+                };
+
+                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Live Supabase Cloud Active`;
+
+            } catch (error) {
+                console.warn("Shifting pipelines. Running localized fallback system data records:", error);
+                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Local Fallback Sandbox`;
+
+                // Safe fallback configuration records if Supabase tables aren't set up yet
+                const localHits = JSON.parse(localStorage.getItem("destination_hits")) || { "Goa": 1, "Jharkhand": 1 };
+                const localDemographics = JSON.parse(localStorage.getItem("user_demographics")) || { "Maharashtra": 2, "Delhi NCR": 1 };
+                const localHours = JSON.parse(localStorage.getItem("booking_hours")) || { "06:00 AM": 2, "12:00 PM": 10, "08:00 PM": 15 };
+
+                summaryData = {
+                    peak_hours: Object.keys(localHours).map(time => ({ label: time, total: localHours[time] })),
+                    demographics: Object.keys(localDemographics).map(region => ({ region: region, value: localDemographics[region] })),
+                    destinations: Object.keys(localHits).map(state => ({ state: state, hits: localHits[state] }))
+                };
+            }
+
+            renderCharts(summaryData);
+        }
+
+        function renderCharts(analyticsDataSummary) {
+            // Graph 1 Execution: Hourly Peak Volume Curves (Line Layout)
+            new Chart(document.getElementById('peakHoursChart'), {
+                type: 'line',
+                data: {
+                    labels: analyticsDataSummary.peak_hours.map(d => d.label),
+                    datasets: [{
+                        data: analyticsDataSummary.peak_hours.map(d => d.total),
+                        borderColor: '#f97316',
+                        backgroundColor: 'rgba(249, 115, 22, 0.05)',
+                        borderWidth: 3,
+                        tension: 0.35,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+                        y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', font: { size: 10 }, stepSize: 1, beginAtZero: true } }
+                    }
+                }
+            });
+
+            // Graph 2 Execution: Regional Demographics Distribution (Doughnut Layout)
+            new Chart(document.getElementById('demographicsChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: analyticsDataSummary.demographics.map(d => d.region),
+                    datasets: [{
+                        data: analyticsDataSummary.demographics.map(d => d.value),
+                        backgroundColor: ['#f97316', '#3b82f6', '#10b981', '#6366f1', '#a855f7', '#ec4899'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: { color: '#cbd5e1', font: { size: 11 }, padding: 12 }
+                        }
+                    }
+                }
+            });
+
+            // Graph 3 Execution: Destination Popularity Rankings (Vertical Bar Layout)
+            new Chart(document.getElementById('destinationsChart'), {
+                type: 'bar',
+                data: {
+                    labels: analyticsDataSummary.destinations.map(d => d.state),
+                    datasets: [{
+                        data: analyticsDataSummary.destinations.map(d => d.hits),
+                        backgroundColor: '#f97316',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+                        y: { 
+                            grid: { color: '#1e293b' }, 
+                            ticks: { color: '#94a3b8', font: { size: 10 }, stepSize: 1, beginAtZero: true } 
+                        }
+                    }
+                }
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", loadLiveDashboard);
+    </script>
+</body>
+</html>
