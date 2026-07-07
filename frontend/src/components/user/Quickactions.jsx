@@ -13,7 +13,7 @@ export default function QuickActions({ onPlaceholderAction }) {
       key: "create-trip",
       label: "Create Trip",
       icon: Plus,
-      onClick: () => navigate("/trip-configuration"),
+      onClick: () => navigate("/trip-prep"),
     },
     {
       key: "saved-trips",

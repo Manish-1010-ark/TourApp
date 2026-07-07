@@ -17,7 +17,7 @@ export default function WelcomeBanner({ name }) {
 
       <button
         type="button"
-        onClick={() => navigate("/trip-configuration")}
+        onClick={() => navigate("/trip-prep")}
         className="flex items-center gap-2 shrink-0 btn-primary"
       >
         <Plus size={16} />
