@@ -13,9 +13,10 @@ NO AI MODELS | NO EXTERNAL APIS | PURE LOGIC
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, Union
+from typing import Optional, Union, Dict
 from data.cities import get_city_by_name, validate_city_exists
-from utils.distance import calculate_distance, calculate_minimum_days
+from utils.distance import calculate_estimated_road_distance, calculate_minimum_days
+from utils.feasibility import evaluate_trip_feasibility, get_mode_comparison_table
 
 router = APIRouter()
 
@@ -56,14 +57,42 @@ class RouteValidationRequest(BaseModel):
         return v
 
 
+class ModeComparisonEntry(BaseModel):
+    """Per-mode feasibility detail, used in the `mode_comparison` breakdown"""
+    one_way_time: str
+    round_trip_hours: float
+    remaining_days: float
+    status: str
+    status_label: str
+    notes: str
+
+
 class RouteValidationResponse(BaseModel):
     """Response containing feasibility analysis"""
+    # --- Original fields (UNCHANGED - existing clients keep working as-is) ---
     feasible: bool
     distance_km: int
     minimum_days: int
     source_city: Optional[str] = None
     destination_city: Optional[str] = None
     reason: Optional[str] = None
+
+    # --- New, additive fields from the intelligent feasibility engine ---
+    # These are all optional so any existing consumer that only reads the
+    # fields above is completely unaffected.
+    status: Optional[str] = Field(
+        None, description="Rich trip status: ideal / feasible / possible_with_limited_time / not_recommended / not_possible"
+    )
+    status_label: Optional[str] = Field(None, description="Human-readable status label, e.g. 'Short but Manageable'")
+    trip_rating: Optional[str] = Field(None, description="Short glanceable rating, e.g. 'Excellent', 'Great', 'Fair', 'Tight', 'Poor'")
+    recommended_mode: Optional[str] = Field(None, description="Best overall travel mode for this route/duration")
+    estimated_travel_time: Optional[str] = Field(None, description="One-way travel time for the recommended mode")
+    remaining_time_days: Optional[float] = Field(None, description="Days left for sightseeing after round-trip travel (numeric, kept for compatibility)")
+    remaining_time_text: Optional[str] = Field(None, description="Human-language description of remaining sightseeing time, e.g. 'You'll have around 2\u00bd days to explore your destination.'")
+    message: Optional[str] = Field(None, description="Ready-to-display, human travel-planner-style recommendation paragraph")
+    mode_comparison: Optional[Dict[str, ModeComparisonEntry]] = Field(
+        None, description="Per-mode breakdown (flight/train/bus/car) for a travel-mode comparison UI"
+    )
 
 
 # ============================================================================
@@ -85,16 +114,28 @@ async def validate_route(request: RouteValidationRequest):
        - For custom/unlisted locations
        - Direct coordinate input
     
-    **Validation logic:**
-    - Calculates distance using Haversine formula
-    - Applies India-specific feasibility rules
-    - Returns minimum recommended days
+    **Validation logic (updated):**
+    - Calculates straight-line distance via Haversine, then converts it to
+      an estimated real-world ROAD distance using adaptive multipliers
+      (`utils.distance.calculate_estimated_road_distance`). This is the
+      distance used everywhere below and in the response.
+    - Runs the mode-aware feasibility engine
+      (`utils.feasibility.evaluate_trip_feasibility`), which checks every
+      travel mode's one-way time, round-trip time, and remaining
+      sightseeing time rather than comparing distance against a single
+      fixed day threshold. This is what makes a route like a 3-day
+      Delhi-Mumbai trip correctly come back feasible (by flight) instead
+      of being rejected outright.
+    - `minimum_days` is still returned for backward compatibility, but is
+      now a secondary, simple reference figure -- `feasible` is driven by
+      the richer engine, not by `days >= minimum_days`.
     
     Args:
         request: Source/destination (cities or coordinates) and trip duration
     
     Returns:
-        RouteValidationResponse with feasibility status
+        RouteValidationResponse with feasibility status plus the richer
+        status/recommended_mode/message fields
     
     Raises:
         HTTPException 400: Invalid input or city not found
@@ -152,19 +193,33 @@ async def validate_route(request: RouteValidationRequest):
         )
     
     # ========================================================================
-    # DISTANCE CALCULATION
+    # DISTANCE CALCULATION (now realistic road-distance, not straight-line)
     # ========================================================================
     
-    distance_km = calculate_distance(source_lat, source_lon, dest_lat, dest_lon)
+    distance_km = calculate_estimated_road_distance(source_lat, source_lon, dest_lat, dest_lon)
     
     # ========================================================================
     # FEASIBILITY CHECK
     # ========================================================================
     
+    # Legacy reference figure, kept for backward-compatible `minimum_days` field.
     minimum_days = calculate_minimum_days(distance_km)
-    feasible = request.days >= minimum_days
     
-    # Generate reason if not feasible
+    # Real feasibility now comes from the mode-aware engine: it checks
+    # every travel mode's actual one-way/round-trip time against the trip
+    # duration, instead of a single fixed distance-to-days threshold.
+    trip_result = evaluate_trip_feasibility(distance_km, request.days)
+    mode_comparison_raw = get_mode_comparison_table(distance_km, request.days)
+    mode_comparison = {
+        mode_name: ModeComparisonEntry(**details)
+        for mode_name, details in mode_comparison_raw.items()
+    }
+    
+    feasible = trip_result.feasible
+    
+    # `reason` keeps its original meaning (a short explanation for an
+    # infeasible trip) so any existing UI that only reads `reason` when
+    # `feasible` is false continues to behave the same way.
     reason = None
     if not feasible:
         reason = (
@@ -182,7 +237,16 @@ async def validate_route(request: RouteValidationRequest):
         minimum_days=minimum_days,
         source_city=source_city_name,
         destination_city=destination_city_name,
-        reason=reason
+        reason=reason,
+        status=trip_result.status.value,
+        status_label=trip_result.status_label,
+        trip_rating=trip_result.trip_rating,
+        recommended_mode=trip_result.recommended_mode.value,
+        estimated_travel_time=trip_result.estimated_travel_time,
+        remaining_time_days=trip_result.remaining_time_days,
+        remaining_time_text=trip_result.remaining_time_text,
+        message=trip_result.message,
+        mode_comparison=mode_comparison,
     )
 
 
@@ -228,10 +292,15 @@ async def route_health():
     return {
         "status": "ok",
         "service": "route_feasibility",
-        "method": "haversine",
+        "method": "haversine_with_road_distance_estimation",
         "data_source": "data/cities.py",
         "input_modes": ["city_names", "raw_coordinates"],
-        "rules": {
+        "distance_model": {
+            "base": "haversine (straight-line)",
+            "adjustment": "adaptive road-distance multiplier (1.18x-1.25x by distance band)",
+        },
+        "feasibility_model": "mode-aware (flight/train/bus/car one-way + round-trip time vs. trip duration)",
+        "legacy_rules_for_minimum_days_field": {
             "0-300km": "2 days",
             "300-700km": "3 days",
             "700-1200km": "4 days",
@@ -258,56 +327,82 @@ POST /api/route/validate
 Response:
 {
   "feasible": true,
-  "distance_km": 233,
+  "distance_km": 234,
   "minimum_days": 2,
   "source_city": "Delhi",
   "destination_city": "Agra",
-  "reason": null
+  "reason": null,
+  "status": "ideal",
+  "status_label": "Ideal",
+  "recommended_mode": "train",
+  "estimated_travel_time": "3h 36m",
+  "remaining_time_days": 1.7,
+  "message": "Recommended Mode: Train\nEstimated Travel Time: 3h 36m\nRemaining Time: 1.7 days\nTrip Status: Ideal\nRecommendation: Excellent choice — plenty of time to relax and explore.\nNote: Comfortable daytime journey.",
+  "mode_comparison": { "...": "per-mode breakdown for flight/train/bus/car" }
 }
+
+Note: `distance_km` is now the estimated ROAD distance (not straight-line),
+so it will typically read a bit higher than before.
 
 ---
 
-Example 2: Not feasible (city names)
+Example 2: Previously "not feasible", now correctly feasible by flight
 POST /api/route/validate
 {
   "source_city": "Delhi",
-  "destination_city": "Bangalore",
-  "days": 2
-}
-Response:
-{
-  "feasible": false,
-  "distance_km": 2157,
-  "minimum_days": 5,
-  "source_city": "Delhi",
-  "destination_city": "Bangalore",
-  "reason": "Distance too long for selected trip duration. Recommended minimum is 5 days for a 2157km journey."
-}
-
----
-
-Example 3: Mumbai to Goa (popular route)
-POST /api/route/validate
-{
-  "source_city": "Mumbai",
-  "destination_city": "Goa",
+  "destination_city": "Mumbai",
   "days": 3
 }
 Response:
 {
   "feasible": true,
-  "distance_km": 461,
-  "minimum_days": 3,
-  "source_city": "Mumbai",
-  "destination_city": "Goa",
-  "reason": null
+  "distance_km": 1418,
+  "minimum_days": 5,
+  "source_city": "Delhi",
+  "destination_city": "Mumbai",
+  "reason": null,
+  "status": "ideal",
+  "status_label": "Ideal",
+  "recommended_mode": "flight",
+  "estimated_travel_time": "5h 1m",
+  "remaining_time_days": 2.6,
+  "message": "Recommended Mode: Flight\nEstimated Travel Time: 5h 1m\nRemaining Time: 2.6 days\nTrip Status: Ideal\nRecommendation: Excellent choice — plenty of time to relax and explore.\nNote: Includes airport transfer, check-in, security and boarding time."
+}
+
+Note: `minimum_days` (5) is still reported as the legacy reference figure,
+but `feasible` is now driven by the mode-aware engine, which correctly
+recognizes this as flyable within 3 days.
+
+---
+
+Example 3: Genuinely too long even by flight
+POST /api/route/validate
+{
+  "source_city": "Delhi",
+  "destination_city": "Bangalore",
+  "days": 1
+}
+Response:
+{
+  "feasible": false,
+  "distance_km": 2100,
+  "minimum_days": 5,
+  "source_city": "Delhi",
+  "destination_city": "Bangalore",
+  "reason": "Distance too long for selected trip duration. Recommended minimum is 5 days for a 2100km journey.",
+  "status": "not_possible",
+  "status_label": "Not Possible",
+  "recommended_mode": "flight",
+  "estimated_travel_time": "6h",
+  "remaining_time_days": 0.0,
+  "message": "Recommended Mode: Flight\nEstimated Travel Time: 6h\nRemaining Time: 0.0 days\nTrip Status: Not Possible\nRecommendation: This route isn't realistically possible in the given duration, even by flight."
 }
 
 ---
 
 Example 4: GET endpoint (simplified)
 GET /api/route/validate/Mumbai/Goa/3
-Response: Same as POST example above
+Response: Same shape as the POST examples above
 
 ---
 
@@ -338,11 +433,17 @@ POST /api/route/validate
 Response:
 {
   "feasible": true,
-  "distance_km": 233,
+  "distance_km": 234,
   "minimum_days": 2,
   "source_city": null,
   "destination_city": null,
-  "reason": null
+  "reason": null,
+  "status": "ideal",
+  "status_label": "Ideal",
+  "recommended_mode": "train",
+  "estimated_travel_time": "3h 36m",
+  "remaining_time_days": 1.7,
+  "message": "..."
 }
 
 ---

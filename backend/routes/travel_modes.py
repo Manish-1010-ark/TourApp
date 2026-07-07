@@ -16,13 +16,15 @@ from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict
 from enum import Enum
 from data.cities import get_city_by_name, validate_city_exists
-from utils.distance import calculate_distance
+from utils.distance import calculate_estimated_road_distance
 from utils.travel_time import (
     calculate_travel_time,
     format_travel_time,
+    is_mode_time_feasible,
     TravelMode,
     SPEED_CONFIG
 )
+from utils.feasibility import evaluate_trip_feasibility
 
 router = APIRouter()
 
@@ -67,6 +69,15 @@ class TravelModeResponse(BaseModel):
     preferred_mode_valid: bool
     preferred_mode_reason: Optional[str] = None
 
+    # --- New, additive fields from the intelligent feasibility engine ---
+    # Optional so existing consumers reading only the fields above are unaffected.
+    best_mode: Optional[str] = Field(None, description="Overall best mode, chosen by the weighted multi-factor scoring engine")
+    trip_status: Optional[str] = Field(None, description="ideal / feasible / possible_with_limited_time / not_recommended / not_possible")
+    trip_status_label: Optional[str] = Field(None, description="Human-readable trip status label")
+    trip_rating: Optional[str] = Field(None, description="Short glanceable rating, e.g. 'Excellent', 'Great', 'Fair', 'Tight', 'Poor'")
+    remaining_time_text: Optional[str] = Field(None, description="Human-language description of remaining sightseeing time")
+    recommendation_message: Optional[str] = Field(None, description="Ready-to-display, human travel-planner-style recommendation paragraph")
+
 
 # ============================================================================
 # MODE RECOMMENDATION LOGIC
@@ -74,32 +85,43 @@ class TravelModeResponse(BaseModel):
 
 def get_recommended_modes(distance_km: int) -> List[TravelMode]:
     """
-    Recommend travel modes based on distance.
-    
+    Recommend travel modes based on distance, matching how an
+    experienced travel planner actually reasons about a route (see
+    `utils.feasibility` for the full weighted scoring engine that picks
+    the single *best* mode -- this function just returns the shortlist
+    of realistic options for a given distance).
+
     Distance-based logic (India-specific):
-    - Short (≤ 300 km): Car, Bus
+    - Short (< 200 km): Car (default), Train (if a major rail link
+      exists). Flights are not realistic at this distance.
       Example: Delhi-Agra (230km), Mumbai-Pune (150km)
-    
-    - Medium (300–700 km): Train, Bus
-      Example: Mumbai-Goa (580km), Delhi-Jaipur (280km)
-    
-    - Long (700–1200 km): Train, Flight
-      Example: Delhi-Mumbai (1400km), Bangalore-Hyderabad (575km)
-    
-    - Very Long (> 1200 km): Flight (primary), Train (secondary)
-      Example: Delhi-Bangalore (2150km), Mumbai-Kolkata (2000km)
-    
+
+    - Medium (200–500 km): Car, Train. Flight only becomes sensible if
+      the drive itself would take more than ~6-7 hours.
+      Example: Mumbai-Goa (461km), Delhi-Jaipur (280km)
+
+    - Long (500–900 km): Train, Flight. Car only for genuine road-trip
+      destinations.
+      Example: Delhi-Mumbai (1378km falls above this band), Bangalore-Hyderabad (575km)
+
+    - Very Long (> 900 km): Flight (primary), Train (secondary).
+      Example: Delhi-Bangalore (2157km), Mumbai-Kolkata (~2000km)
+
+    Bus is intentionally left off this shortlist in every band -- it's
+    rarely a realistic recommendation and is only surfaced when a
+    traveler explicitly asks for it (see `validate_preferred_mode`).
+
     Args:
         distance_km: Distance in kilometers
-    
+
     Returns:
         List of recommended travel modes (ordered by preference)
     """
-    if distance_km <= 300:
-        return [TravelMode.CAR, TravelMode.BUS]
-    elif distance_km <= 700:
-        return [TravelMode.TRAIN, TravelMode.BUS]
-    elif distance_km <= 1200:
+    if distance_km < 200:
+        return [TravelMode.CAR, TravelMode.TRAIN]
+    elif distance_km < 500:
+        return [TravelMode.CAR, TravelMode.TRAIN]
+    elif distance_km < 900:
         return [TravelMode.TRAIN, TravelMode.FLIGHT]
     else:
         return [TravelMode.FLIGHT, TravelMode.TRAIN]
@@ -115,16 +137,16 @@ def validate_preferred_mode(
     Validate if user's preferred travel mode is feasible.
     
     Two validation checks:
-    1. Is the mode in recommended modes for this distance?
-    2. Does travel time leave enough time for the actual trip?
-    
-    Why 40% rule?
-    - If one-way travel takes > 40% of total trip time, it's impractical
-    - Example: 3-day trip = 72 hours. If travel takes > 28.8 hours one-way,
-      you spend more time traveling than enjoying the destination
+    1. Is the mode in recommended modes for this distance? (Bus is a
+       special case -- it's rarely the *default* recommendation, but a
+       traveler who explicitly asks for it just needs it to be
+       time-feasible, not on the default shortlist.)
+    2. Does travel time leave enough time for the actual trip? (delegated
+       to `utils.travel_time.is_mode_time_feasible`, so the 40%-of-trip
+       rule lives in exactly one place instead of being duplicated here.)
     
     Args:
-        distance_km: Distance in kilometers
+        distance_km: Distance in kilometers (road-distance estimate)
         days: Trip duration in days
         preferred_mode: User's preferred mode
         recommended_modes: System-recommended modes
@@ -132,28 +154,19 @@ def validate_preferred_mode(
     Returns:
         Tuple of (is_valid, reason_if_invalid)
     """
-    # Check 1: Is mode in recommended list?
-    if preferred_mode not in recommended_modes:
+    # Check 1: Is mode in recommended list? Bus is exempt from this
+    # check -- it's excluded from the default shortlist by design, but
+    # remains valid if the traveler picked it on purpose and it's still
+    # time-feasible (Check 2).
+    if preferred_mode not in recommended_modes and preferred_mode != TravelMode.BUS:
         return (
             False,
             f"Selected mode is not realistic for {distance_km}km distance. "
             f"Recommended: {', '.join([m.value for m in recommended_modes])}."
         )
     
-    # Check 2: Time feasibility (40% rule)
-    travel_hours = calculate_travel_time(distance_km, preferred_mode)
-    total_trip_hours = days * 24
-    travel_percentage = (travel_hours / total_trip_hours) * 100
-    
-    if travel_percentage > 40:
-        return (
-            False,
-            f"Selected mode requires {format_travel_time(travel_hours)} one-way, "
-            f"which is too long for a {days}-day trip. "
-            f"Consider a faster mode or extend your trip duration."
-        )
-    
-    return (True, None)
+    # Check 2: Time feasibility (shared 40% rule, single source of truth)
+    return is_mode_time_feasible(distance_km, days, preferred_mode)
 
 
 # ============================================================================
@@ -217,7 +230,7 @@ async def get_travel_modes(request: TravelModeRequest):
         source_city = get_city_by_name(request.source_city)
         dest_city = get_city_by_name(request.destination_city)
         
-        distance_km = calculate_distance(
+        distance_km = calculate_estimated_road_distance(
             source_city["lat"], source_city["lon"],
             dest_city["lat"], dest_city["lon"]
         )
@@ -266,6 +279,12 @@ async def get_travel_modes(request: TravelModeRequest):
         )
     
     # ========================================================================
+    # OVERALL TRIP STATUS (mode-aware, considers round-trip + remaining time)
+    # ========================================================================
+    
+    trip_result = evaluate_trip_feasibility(distance_km, request.days)
+    
+    # ========================================================================
     # RESPONSE
     # ========================================================================
     
@@ -276,7 +295,13 @@ async def get_travel_modes(request: TravelModeRequest):
         recommended_modes=[mode.value for mode in recommended_modes],
         estimated_times=estimated_times,
         preferred_mode_valid=preferred_mode_valid,
-        preferred_mode_reason=preferred_mode_reason
+        preferred_mode_reason=preferred_mode_reason,
+        best_mode=trip_result.recommended_mode.value,
+        trip_status=trip_result.status.value,
+        trip_status_label=trip_result.status_label,
+        trip_rating=trip_result.trip_rating,
+        remaining_time_text=trip_result.remaining_time_text,
+        recommendation_message=trip_result.message,
     )
 
 
@@ -328,6 +353,7 @@ async def travel_health():
         "service": "travel_modes",
         "data_source": "data/cities.py",
         "input_modes": ["city_names", "raw_distance"],
+        "distance_model": "haversine adjusted with adaptive road-distance multiplier",
         "supported_modes": [mode.value for mode in TravelMode],
         "speed_assumptions": {
             "flight": "700 km/h + 3h buffer",
@@ -340,7 +366,8 @@ async def travel_health():
             "300-700km": "train, bus",
             "700-1200km": "train, flight",
             ">1200km": "flight, train"
-        }
+        },
+        "overall_trip_status": "mode-aware (see utils.feasibility.evaluate_trip_feasibility)"
     }
 
 

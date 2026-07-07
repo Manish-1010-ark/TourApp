@@ -348,8 +348,9 @@ export default function ItineraryGeneration() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_300px] gap-6 items-start">
-            {/* LEFT SIDEBAR */}
-            <div className="hidden lg:flex flex-col gap-5">
+            {/* LEFT SIDEBAR (stacks above the timeline on mobile — grid-cols-1
+                already handles that; only "hidden" was wrongly removing it) */}
+            <div className="flex flex-col gap-5">
               <DayNavigator
                 days={itinerary.itinerary}
                 activeDay={activeDayInView}

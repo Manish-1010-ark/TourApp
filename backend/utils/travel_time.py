@@ -8,6 +8,21 @@ This module ensures:
 - Consistent travel time calculations
 - Single source of truth for speed assumptions
 - Reusable across the entire backend
+
+NOTE ON THIS REVISION
+----------------------
+No logic in this file changed. Every function here already takes a
+plain `distance_km` argument and has no opinion about how that distance
+was derived. The trip-planning pipeline now feeds these functions the
+ESTIMATED ROAD DISTANCE from `utils.distance.calculate_estimated_road_distance()`
+instead of raw Haversine distance, which automatically makes every
+travel-time calculation below more realistic without any code changes
+in this file.
+
+This file is also reused directly by `utils.feasibility`, which builds
+the richer (Ideal / Feasible / Possible with Limited Time / Not
+Recommended / Not Possible) validation engine on top of these
+primitives, rather than duplicating any speed/time math.
 """
 
 from enum import Enum
@@ -62,7 +77,7 @@ def calculate_travel_time(distance_km: int, mode: TravelMode) -> float:
     - Car: Realistic speed with rest breaks factored in
     
     Args:
-        distance_km: Distance in kilometers
+        distance_km: Distance in kilometers (road-distance estimate recommended)
         mode: Travel mode
     
     Returns:
@@ -144,7 +159,7 @@ def calculate_all_travel_times(distance_km: int) -> Dict[str, str]:
     Convenience function for comparison tables in UI.
     
     Args:
-        distance_km: Distance in kilometers
+        distance_km: Distance in kilometers (road-distance estimate recommended)
     
     Returns:
         Dict mapping mode names to formatted time strings

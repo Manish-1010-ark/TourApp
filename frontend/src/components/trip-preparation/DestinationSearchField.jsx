@@ -209,26 +209,29 @@ export default function DestinationSearchField({
         </div>
       </div>
 
-      {selected && (
-        <div className="mt-2 flex items-center gap-1.5 text-xs font-body text-[var(--color-success)] animate-fade-in-up">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M5 13l4 4L19 7"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          {selected.name}, {selected.state}
-        </div>
-      )}
-
-      {searchError && (
-        <div className="mt-2 text-xs font-body text-[var(--color-warning)]">
-          {searchError}
-        </div>
-      )}
+      {/* Fixed-height helper row — always reserves the same space so
+          selecting a city, clearing it, or showing an error never moves
+          the input (or anything below it) up/down. */}
+      <div className="mt-2 h-5 flex items-center text-xs font-body">
+        {searchError ? (
+          <span className="text-[var(--color-warning)] animate-fade-in-up">
+            {searchError}
+          </span>
+        ) : selected ? (
+          <span className="flex items-center gap-1.5 text-[var(--color-success)] animate-fade-in-up">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M5 13l4 4L19 7"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {selected.name}, {selected.state}
+          </span>
+        ) : null}
+      </div>
 
       {isOpen && (suggestions.length > 0 || showEmptyState) && (
         <ul

@@ -4,7 +4,7 @@ import { useCitySearch } from "../hooks/useCitySearch";
 import StepProgress from "../components/trip-preparation/StepProgress";
 import DestinationSearchField from "../components/trip-preparation/DestinationSearchField";
 import JourneyRoute from "../components/trip-preparation/JourneyRoute";
-import DaysSelector from "../components/trip-preparation/DaysSelector";
+import DateRangePicker from "../components/trip-preparation/DateRangePicker";
 import ValidationCard from "../components/trip-preparation/ValidationCard";
 import TravelModeCard from "../components/trip-preparation/TravelModeCard";
 import TripSummary from "../components/trip-preparation/TripSummary";
@@ -15,13 +15,16 @@ import TripSummary from "../components/trip-preparation/TripSummary";
  * Data Flow (UNCHANGED):
  * Step 1 (City Selection) -> Step 2 (Route Validation) -> Step 3 (Travel Mode)
  *
- * State flow (UNCHANGED):
+ * State flow:
  * - selectedCity (lat/lon) -> route validation API
  * - validation result (distance_km) -> travel mode API
- * - days input -> both validation & travel mode APIs
+ * - startDate/endDate (calendar range) -> derived tripDays -> both
+ *   validation & travel mode APIs (backend still only ever receives an
+ *   integer day count, exactly as before)
  *
- * This file only changes presentation. Every API call, request/response
- * shape, sessionStorage key, and navigation target is identical to before.
+ * Every API request/response shape, sessionStorage key (aside from the
+ * added startDate/endDate fields), and navigation target is identical to
+ * before. Only the days input UI and the state that feeds it changed.
  */
 export default function TripPreparation() {
   useGlobalStyles();
@@ -37,10 +40,46 @@ export default function TripPreparation() {
   // ============================================================================
   // STEP 2: ROUTE VALIDATION STATE
   // ============================================================================
-  const [days, setDays] = useState(3);
+  const MIN_TRIP_DAYS = 1;
+  const MAX_TRIP_DAYS = 30;
+
+  // "From" defaults to tomorrow; "To" starts empty until the user picks it.
+  const defaultStartDate = (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 1);
+    return d;
+  })();
+
+  const todayMidnight = (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  })();
+
+  const [startDate, setStartDate] = useState(defaultStartDate);
+  const [endDate, setEndDate] = useState(null);
+  const [dateError, setDateError] = useState(null);
   const [validationResult, setValidationResult] = useState(null);
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState(null);
+
+  // Single derived value — no duplicate state. This is the only value that
+  // ever reaches the backend, exactly like the old integer `days` did.
+  const tripDays =
+    startDate && endDate
+      ? Math.round((endDate - startDate) / (24 * 60 * 60 * 1000)) + 1
+      : null;
+  const tripNights = tripDays !== null ? tripDays - 1 : null;
+
+  const handleDateRangeChange = ({
+    startDate: nextStart,
+    endDate: nextEnd,
+  }) => {
+    setStartDate(nextStart);
+    setEndDate(nextEnd);
+    setDateError(null);
+  };
 
   // ============================================================================
   // STEP 3: TRAVEL MODE STATE
@@ -87,6 +126,24 @@ export default function TripPreparation() {
       return;
     }
 
+    // Date validation (mirrors the old min/max day-count checks, now
+    // expressed against the selected calendar range).
+    if (!startDate || !endDate) {
+      setDateError("Please select both travel dates.");
+      return;
+    }
+    if (endDate < startDate) {
+      setDateError("Return date cannot be before departure date.");
+      return;
+    }
+    if (tripDays < MIN_TRIP_DAYS || tripDays > MAX_TRIP_DAYS) {
+      setDateError(
+        `Trips can be between ${MIN_TRIP_DAYS} and ${MAX_TRIP_DAYS} days.`,
+      );
+      return;
+    }
+    setDateError(null);
+
     setIsValidating(true);
     setValidationError(null);
     setValidationResult(null);
@@ -100,7 +157,7 @@ export default function TripPreparation() {
         body: JSON.stringify({
           source: { lat: sourceCity.lat, lon: sourceCity.lon },
           destination: { lat: destCity.lat, lon: destCity.lon },
-          days: days,
+          days: tripDays,
         }),
       });
 
@@ -112,7 +169,9 @@ export default function TripPreparation() {
       const data = await response.json();
       setValidationResult(data);
     } catch (err) {
-      setValidationError("Failed to validate route. Ensure backend is running.");
+      setValidationError(
+        "Failed to validate route. Ensure backend is running.",
+      );
     } finally {
       setIsValidating(false);
     }
@@ -133,7 +192,7 @@ export default function TripPreparation() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           distance_km: validationResult.distance_km,
-          days: days,
+          days: tripDays,
           preferred_mode: preferredMode,
         }),
       });
@@ -158,7 +217,7 @@ export default function TripPreparation() {
       fetchTravelModes();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [validationResult, days, preferredMode]);
+  }, [validationResult, tripDays, preferredMode]);
 
   // ============================================================================
   // STEP 4: PROCEED TO CONFIGURATION (UNCHANGED)
@@ -169,7 +228,13 @@ export default function TripPreparation() {
       destination: destCity,
       distance_km: validationResult.distance_km,
       travel_mode: preferredMode,
-      days: days,
+      // Dates stored as plain YYYY-MM-DD strings (no time/timezone noise) —
+      // used later for itinerary generation, weather, hotel availability,
+      // and seasonal recommendations.
+      startDate: startDate.toISOString().slice(0, 10),
+      endDate: endDate.toISOString().slice(0, 10),
+      // Integer day count preserved as-is for backend compatibility.
+      days: tripDays,
     };
 
     sessionStorage.setItem("tripData", JSON.stringify(tripData));
@@ -193,7 +258,10 @@ export default function TripPreparation() {
   };
 
   return (
-    <div className="min-h-screen py-10 px-4" style={{ background: "var(--color-bg)" }}>
+    <div
+      className="min-h-screen py-10 px-4"
+      style={{ background: "var(--color-bg)" }}
+    >
       <div className="max-w-6xl mx-auto">
         {/* ====================================================================== */}
         {/* HERO */}
@@ -203,12 +271,20 @@ export default function TripPreparation() {
             Plan Your Perfect Journey
           </h1>
           <p className="font-body text-base text-slate-500 max-w-xl mx-auto">
-            Tell us where you're travelling and we'll build an AI-powered itinerary designed just for you.
+            Tell us where you're travelling and we'll build an AI-powered
+            itinerary designed just for you.
           </p>
         </div>
 
         <div className="mb-10">
-          <StepProgress steps={["Choose Destination", "Validate Route", "Select Travel Mode"]} currentStep={currentStep} />
+          <StepProgress
+            steps={[
+              "Choose Destination",
+              "Validate Route",
+              "Select Travel Mode",
+            ]}
+            currentStep={currentStep}
+          />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
@@ -218,9 +294,15 @@ export default function TripPreparation() {
           <div className="flex flex-col gap-6">
             {/* STEP 1: CITY SELECTION */}
             <div className="card-elevation p-6 md:p-8">
-              <h2 className="font-display text-xl font-bold text-[var(--color-headings)] mb-5">Where are you headed?</h2>
+              <h2 className="font-display text-xl font-bold text-[var(--color-headings)] mb-5">
+                Where are you headed?
+              </h2>
 
-              <JourneyRoute source={sourceCity} destination={destCity} onSwap={handleSwapCities}>
+              <JourneyRoute
+                source={sourceCity}
+                destination={destCity}
+                onSwap={handleSwapCities}
+              >
                 {[
                   <DestinationSearchField
                     key="source"
@@ -230,7 +312,8 @@ export default function TripPreparation() {
                     query={sourceCityQuery}
                     onQueryChange={(val) => {
                       setSourceCityQuery(val);
-                      if (sourceCity && val !== sourceCity.name) setSourceCity(null);
+                      if (sourceCity && val !== sourceCity.name)
+                        setSourceCity(null);
                     }}
                     selected={sourceCity}
                     onSelect={(city) => {
@@ -272,19 +355,50 @@ export default function TripPreparation() {
               </JourneyRoute>
 
               <div className="mt-6 pt-6 border-t border-slate-100">
-                <DaysSelector days={days} onChange={setDays} />
+                <DateRangePicker
+                  startDate={startDate}
+                  endDate={endDate}
+                  onChange={handleDateRangeChange}
+                  minDate={todayMidnight}
+                  minDays={MIN_TRIP_DAYS}
+                  maxDays={MAX_TRIP_DAYS}
+                  error={dateError}
+                />
               </div>
 
               <button
                 onClick={handleValidateRoute}
-                disabled={isValidating || !sourceCity || !destCity}
+                disabled={
+                  isValidating ||
+                  !sourceCity ||
+                  !destCity ||
+                  !startDate ||
+                  !endDate
+                }
                 className="btn-primary w-full mt-6 flex items-center justify-center gap-2"
               >
                 {isValidating ? (
                   <>
-                    <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,0.4)" strokeWidth="3" />
-                      <path d="M21 12a9 9 0 00-9-9" stroke="white" strokeWidth="3" strokeLinecap="round" />
+                    <svg
+                      className="animate-spin"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="9"
+                        stroke="rgba(255,255,255,0.4)"
+                        strokeWidth="3"
+                      />
+                      <path
+                        d="M21 12a9 9 0 00-9-9"
+                        stroke="white"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                      />
                     </svg>
                     Checking route...
                   </>
@@ -301,12 +415,21 @@ export default function TripPreparation() {
             </div>
 
             {/* STEP 2: ROUTE VALIDATION RESULT */}
-            {validationResult && <ValidationCard validationResult={validationResult} days={days} />}
+            {validationResult && (
+              <ValidationCard
+                validationResult={validationResult}
+                days={tripDays}
+                startDate={startDate}
+                endDate={endDate}
+              />
+            )}
 
             {/* STEP 3: TRAVEL MODE SELECTION */}
             {validationResult && validationResult.feasible && (
               <div className="card-elevation p-6 md:p-8 animate-fade-in-up">
-                <h2 className="font-display text-xl font-bold text-[var(--color-headings)] mb-1">Choose your travel mode</h2>
+                <h2 className="font-display text-xl font-bold text-[var(--color-headings)] mb-1">
+                  Choose your travel mode
+                </h2>
                 <p className="text-sm font-body text-slate-500 mb-5">
                   Best options for a {validationResult.distance_km} km journey
                 </p>
@@ -314,7 +437,10 @@ export default function TripPreparation() {
                 {isLoadingModes && (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-2">
                     {[0, 1, 2, 3].map((i) => (
-                      <div key={i} className="skeleton-shimmer h-28 rounded-2xl" />
+                      <div
+                        key={i}
+                        className="skeleton-shimmer h-28 rounded-2xl"
+                      />
                     ))}
                   </div>
                 )}
@@ -328,17 +454,25 @@ export default function TripPreparation() {
                 {modeData && !isLoadingModes && (
                   <>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                      {Object.entries(TRAVEL_MODES).map(([modeKey, modeInfo]) => (
-                        <TravelModeCard
-                          key={modeKey}
-                          modeKey={modeKey}
-                          label={modeInfo.label}
-                          isRecommended={modeData.recommended_modes.includes(modeKey)}
-                          isSelected={preferredMode === modeKey}
-                          estimatedTime={modeData.estimated_times[modeKey]}
-                          onSelect={() => setPreferredMode(preferredMode === modeKey ? null : modeKey)}
-                        />
-                      ))}
+                      {Object.entries(TRAVEL_MODES).map(
+                        ([modeKey, modeInfo]) => (
+                          <TravelModeCard
+                            key={modeKey}
+                            modeKey={modeKey}
+                            label={modeInfo.label}
+                            isRecommended={modeData.recommended_modes.includes(
+                              modeKey,
+                            )}
+                            isSelected={preferredMode === modeKey}
+                            estimatedTime={modeData.estimated_times[modeKey]}
+                            onSelect={() =>
+                              setPreferredMode(
+                                preferredMode === modeKey ? null : modeKey,
+                              )
+                            }
+                          />
+                        ),
+                      )}
                     </div>
 
                     {preferredMode && !modeData.preferred_mode_valid && (
@@ -349,7 +483,8 @@ export default function TripPreparation() {
 
                     {preferredMode && modeData.preferred_mode_valid && (
                       <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-sm font-body text-emerald-800 animate-fade-in-up">
-                        {TRAVEL_MODES[preferredMode].label} is suitable — estimated time:{" "}
+                        {TRAVEL_MODES[preferredMode].label} is suitable —
+                        estimated time:{" "}
                         {modeData.estimated_times[preferredMode]}
                       </div>
                     )}
@@ -361,12 +496,18 @@ export default function TripPreparation() {
             {/* STEP 4: PROCEED TO CONFIGURATION */}
             {validationResult && validationResult.feasible && modeData && (
               <div className="card-elevation p-6 md:p-8 animate-fade-in-up">
-                <h2 className="font-display text-xl font-bold text-[var(--color-headings)] mb-2">Ready for the next step</h2>
+                <h2 className="font-display text-xl font-bold text-[var(--color-headings)] mb-2">
+                  Ready for the next step
+                </h2>
                 <p className="text-sm font-body text-slate-500 mb-5">
-                  Your route is validated. Continue to configure your trip preferences and generate the itinerary.
+                  Your route is validated. Continue to configure your trip
+                  preferences and generate the itinerary.
                 </p>
 
-                <button onClick={handleProceedToConfiguration} className="btn-primary w-full">
+                <button
+                  onClick={handleProceedToConfiguration}
+                  className="btn-primary w-full"
+                >
                   Continue to Trip Configuration →
                 </button>
               </div>
@@ -379,7 +520,9 @@ export default function TripPreparation() {
           <TripSummary
             sourceCity={sourceCity}
             destCity={destCity}
-            days={days}
+            days={tripDays}
+            startDate={startDate}
+            endDate={endDate}
             validationResult={validationResult}
             preferredMode={preferredMode}
           />
