@@ -1,38 +1,85 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useGlobalStyles } from "../hooks/useGlobalStyles";
+import ActionBar from "../components/itinerary/ActionBar";
+import HeroBanner from "../components/itinerary/HeroBanner";
+import TripStats from "../components/itinerary/TripStats";
+import DayNavigator from "../components/itinerary/DayNavigator";
+import BudgetSummaryCard from "../components/itinerary/BudgetSummaryCard";
+import WeatherCard from "../components/itinerary/WeatherCard";
+import DayCard from "../components/itinerary/DayCard";
+import MustVisitSection from "../components/itinerary/MustVisitSection";
+import FoodSection from "../components/itinerary/FoodSection";
+import TravelTips from "../components/itinerary/TravelTips";
+import EssentialInfo from "../components/itinerary/EssentialInfo";
+import AdditionalInfoSection from "../components/itinerary/AdditionalInfoSection";
+import LoadingSkeleton from "../components/itinerary/LoadingSkeleton";
+import ErrorState from "../components/itinerary/ErrorState.jsx";
+import { getField, isEmptyValue } from "../components/itinerary/utils.js";
 
 /**
- * Module 6: AI Itinerary Generation
+ * ItineraryGeneration — flagship page rendering the AI-generated
+ * itinerary.
  *
- * Renders AI-generated itinerary with clear day-level structure
- * and activity blocks following backend schema v2.0
+ * UNCHANGED from the original implementation (contract-critical, do not
+ * edit without checking the backend):
+ *  - endpoint: POST http://127.0.0.1:8000/api/itinerary
+ *  - request body: the raw `configuration` object, untouched
+ *  - response shape consumed: { destination, days, overall_style, itinerary: [...] }
+ *  - "Return to Configuration" target: "/trip-configuration"
+ *
+ * Everything else (loading state, error state, and all rendering below)
+ * is new presentation only.
+ *
+ * ROUTING FIX (see App.jsx / TripConfiguration.jsx): TripConfiguration
+ * stores its result under sessionStorage key "configuredTrip" and
+ * navigates to "/itinerary-generation" (the route actually registered in
+ * App.jsx). This page previously read a different key ("tripConfiguration"),
+ * which never matched what TripConfiguration wrote — so this page always
+ * fell through to the "No trip configuration found" state even after a
+ * successful configure step. The read key below has been updated to
+ * "configuredTrip" to match the writer and close that gap.
  */
 export default function ItineraryGeneration() {
+  useGlobalStyles();
+
   const [configuration, setConfiguration] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null); // { kind, detail }
   const [itinerary, setItinerary] = useState(null);
-  const [showRawJson, setShowRawJson] = useState(false);
+
+  const [expandedDay, setExpandedDay] = useState(1);
+  const [activeDayInView, setActiveDayInView] = useState(1);
+  const dayRefs = useRef({});
 
   // ============================================================================
-  // LOAD CONFIGURATION FROM PREVIOUS MODULE
+  // LOAD CONFIGURATION FROM PREVIOUS MODULE (UNCHANGED)
   // ============================================================================
   useEffect(() => {
-    const stored = sessionStorage.getItem("tripConfiguration");
+    const stored = sessionStorage.getItem("configuredTrip");
+    console.log(
+      '[ItineraryGeneration] Reading sessionStorage key "configuredTrip":',
+      stored ? "found" : "missing",
+    );
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
+        console.log("[ItineraryGeneration] Parsed configuration:", parsed);
         setConfiguration(parsed);
-        console.log("✅ Configuration loaded from sessionStorage");
       } catch (err) {
-        console.error("❌ Failed to parse configuration:", err);
+        console.error(
+          "[ItineraryGeneration] Failed to parse configuration JSON:",
+          err,
+        );
       }
     } else {
-      console.warn("⚠️ No configuration found in sessionStorage");
+      console.warn(
+        '[ItineraryGeneration] No "configuredTrip" entry in sessionStorage — user likely navigated here directly without completing configuration.',
+      );
     }
   }, []);
 
   // ============================================================================
-  // GENERATE ITINERARY
+  // GENERATE ITINERARY (endpoint + request body UNCHANGED)
   // ============================================================================
   const handleGenerateItinerary = async () => {
     if (!configuration) return;
@@ -41,439 +88,332 @@ export default function ItineraryGeneration() {
     setError(null);
     setItinerary(null);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+    console.log(
+      "[ItineraryGeneration] POST /api/itinerary — request body:",
+      configuration,
+    );
+
     try {
       const response = await fetch("http://127.0.0.1:8000/api/itinerary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(configuration),
+        signal: controller.signal,
       });
 
+      console.log(
+        "[ItineraryGeneration] /api/itinerary response status:",
+        response.status,
+      );
+
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail || "Failed to generate itinerary");
+        const err = await response.json().catch(() => ({}));
+        console.error("[ItineraryGeneration] Backend returned an error:", {
+          status: response.status,
+          body: err,
+        });
+        throw Object.assign(
+          new Error(err.detail || "Failed to generate itinerary"),
+          { kind: "backend" },
+        );
       }
 
       const data = await response.json();
+      console.log(
+        "[ItineraryGeneration] Parsed /api/itinerary response:",
+        data,
+      );
+
+      if (isEmptyValue(data)) {
+        console.error("[ItineraryGeneration] Response was empty");
+        throw Object.assign(new Error("Empty response"), { kind: "empty" });
+      }
+      if (!Array.isArray(data.itinerary) || data.itinerary.length === 0) {
+        console.error(
+          "[ItineraryGeneration] Response missing day-by-day itinerary array:",
+          data,
+        );
+        throw Object.assign(
+          new Error("Response missing day-by-day itinerary"),
+          { kind: "malformed" },
+        );
+      }
+
       setItinerary(data);
+      setExpandedDay(data.itinerary[0].day ?? 1);
+      setActiveDayInView(data.itinerary[0].day ?? 1);
     } catch (err) {
-      setError(err.message);
+      if (err.name === "AbortError") {
+        console.error(
+          "[ItineraryGeneration] Request aborted (timeout after 45s)",
+        );
+        setError({ kind: "timeout" });
+      } else if (err instanceof TypeError) {
+        console.error("[ItineraryGeneration] Network error:", err);
+        setError({ kind: "network" });
+      } else {
+        console.error(
+          "[ItineraryGeneration] Itinerary generation failed:",
+          err,
+        );
+        setError({
+          kind: err.kind || "generic",
+          detail: err.kind ? undefined : err.message,
+        });
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
 
   // ============================================================================
-  // HELPER: Get period icon
+  // SCROLL-SPY: highlight the day nearest the top of the viewport
   // ============================================================================
-  const getPeriodIcon = (period) => {
-    const icons = {
-      morning: "🌅",
-      afternoon: "☀️",
-      evening: "🌆",
-    };
-    return icons[period] || "📍";
+  useEffect(() => {
+    if (!itinerary) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const dayNum = Number(entry.target.id.replace("day-", ""));
+            setActiveDayInView(dayNum);
+          }
+        });
+      },
+      { rootMargin: "-15% 0px -70% 0px", threshold: 0 },
+    );
+
+    Object.values(dayRefs.current).forEach((el) => el && observer.observe(el));
+    return () => observer.disconnect();
+  }, [itinerary]);
+
+  const registerDayRef = useCallback(
+    (dayNum) => (el) => {
+      dayRefs.current[dayNum] = el;
+    },
+    [],
+  );
+
+  const handleSelectDay = (dayNum) => {
+    setExpandedDay(dayNum);
+    setActiveDayInView(dayNum);
+    dayRefs.current[dayNum]?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
   };
 
   // ============================================================================
-  // HELPER: Get activity type badge
+  // DERIVED, DEFENSIVE DISPLAY VALUES
   // ============================================================================
-  const getActivityBadge = (type) => {
-    const styles = {
-      relaxation: "bg-blue-100 text-blue-800 border-blue-200",
-      food: "bg-orange-100 text-orange-800 border-orange-200",
-      sightseeing: "bg-purple-100 text-purple-800 border-purple-200",
-      culture: "bg-green-100 text-green-800 border-green-200",
-      photography: "bg-pink-100 text-pink-800 border-pink-200",
-      beach: "bg-cyan-100 text-cyan-800 border-cyan-200",
-      adventure: "bg-red-100 text-red-800 border-red-200",
-    };
-    return styles[type] || "bg-gray-100 text-gray-800 border-gray-200";
-  };
+  const tripSummary = configuration?.trip_summary;
+  const overallStyle = itinerary?.overall_style;
+  const budgetTier = overallStyle?.budget ?? configuration?.constraints?.budget;
+  const paceLabel = overallStyle?.pace ?? configuration?.constraints?.pace;
+  const styleLabel = [paceLabel, budgetTier]
+    .filter(Boolean)
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join(" · ");
+
+  const placesCovered = itinerary
+    ? itinerary.itinerary.reduce(
+        (sum, day) => sum + (day.blocks?.length ?? 0),
+        0,
+      )
+    : undefined;
+
+  const numericBudget = itinerary
+    ? getField(itinerary, "estimated_budget", "total_budget")
+    : undefined;
+  const budgetBreakdown = itinerary
+    ? getField(itinerary, "budget_breakdown", "cost_breakdown")
+    : undefined;
+  const budgetDisplay =
+    numericBudget ??
+    (budgetBreakdown
+      ? getField(budgetBreakdown, "total", "estimated_total")
+      : undefined) ??
+    (budgetTier
+      ? `${budgetTier.charAt(0).toUpperCase()}${budgetTier.slice(1)} tier`
+      : undefined);
 
   // ============================================================================
-  // RENDER: MISSING CONFIGURATION
+  // RENDER: MISSING CONFIGURATION (UNCHANGED navigation target)
   // ============================================================================
   if (!configuration) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white border border-red-300 rounded-lg p-8">
-            <div className="flex items-start gap-4">
-              <div className="text-3xl">⚠️</div>
-              <div className="flex-1">
-                <h2 className="text-xl font-bold text-gray-900 mb-2">
-                  Missing Configuration
-                </h2>
-                <p className="text-gray-600 mb-4">
-                  No trip configuration found. Please complete the configuration
-                  step first.
-                </p>
-                <button
-                  onClick={() => (window.location.href = "/trip-configuration")}
-                  className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded"
-                >
-                  ← Return to Configuration
-                </button>
-              </div>
-            </div>
-          </div>
+      <div
+        className="min-h-screen flex items-center justify-center py-10 px-4"
+        style={{ background: "var(--color-bg)" }}
+      >
+        <div className="card-elevation p-8 max-w-md text-center animate-fade-in-up">
+          <div className="text-4xl mb-3">🧭</div>
+          <h2 className="font-display text-xl font-bold text-[var(--color-headings)] mb-2">
+            No trip configuration found
+          </h2>
+          <p className="text-sm font-body text-slate-500 mb-6">
+            Please complete the configuration step before generating an
+            itinerary.
+          </p>
+          <button
+            onClick={() => (window.location.href = "/trip-configuration")}
+            className="btn-primary w-full"
+          >
+            ← Return to Configuration
+          </button>
         </div>
       </div>
     );
   }
 
-  // ============================================================================
-  // RENDER: MAIN UI
-  // ============================================================================
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-5xl mx-auto">
-        {/* ====================================================================== */}
-        {/* HEADER */}
-        {/* ====================================================================== */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            AI Itinerary Generation
-          </h1>
-          <p className="text-gray-600">
-            Generate a personalized day-by-day travel itinerary
-          </p>
-        </div>
+    <div className="min-h-screen" style={{ background: "var(--color-bg)" }}>
+      <ActionBar
+        onRegenerate={handleGenerateItinerary}
+        isRegenerating={loading && !!itinerary}
+      />
 
-        {/* ====================================================================== */}
-        {/* CONFIGURATION SUMMARY */}
-        {/* ====================================================================== */}
-        {!itinerary && (
-          <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">
-              Your Trip Configuration
+      {/* ================================================================== */}
+      {/* NOT YET GENERATED — ready-to-generate state */}
+      {/* ================================================================== */}
+      {!itinerary && !loading && !error && (
+        <div className="max-w-2xl mx-auto px-4 py-16">
+          <div className="card-elevation p-8 text-center animate-fade-in-up">
+            <div className="text-4xl mb-4">✨</div>
+            <h2 className="font-display text-2xl font-bold text-[var(--color-headings)] mb-2">
+              Ready to plan {tripSummary?.destination ?? "your trip"}
             </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="border border-blue-200 bg-blue-50 rounded p-4">
-                <div className="text-xs font-semibold text-blue-700 uppercase mb-1">
-                  Route
-                </div>
-                <div className="text-sm font-bold text-gray-900">
-                  {configuration.trip_summary.source} →{" "}
-                  {configuration.trip_summary.destination}
-                </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  {configuration.trip_summary.days} days •{" "}
-                  {configuration.trip_summary.travel_mode}
-                </div>
-              </div>
-
-              <div className="border border-green-200 bg-green-50 rounded p-4">
-                <div className="text-xs font-semibold text-green-700 uppercase mb-1">
-                  Pace & Budget
-                </div>
-                <div className="text-sm font-bold text-gray-900 capitalize">
-                  {configuration.constraints.pace} Pace
-                </div>
-                <div className="text-xs text-gray-600 mt-1 capitalize">
-                  {configuration.constraints.budget} •{" "}
-                  {configuration.constraints.places_per_day} places/day
-                </div>
-              </div>
-
-              <div className="border border-orange-200 bg-orange-50 rounded p-4">
-                <div className="text-xs font-semibold text-orange-700 uppercase mb-1">
-                  Interests
-                </div>
-                <div className="text-sm font-bold text-gray-900">
-                  {configuration.interests.length} Selected
-                </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  {configuration.interests.slice(0, 2).join(", ")}
-                  {configuration.interests.length > 2 &&
-                    ` +${configuration.interests.length - 2}`}
-                </div>
-              </div>
-            </div>
-
+            <p className="text-sm font-body text-slate-500 mb-6">
+              {tripSummary?.days} {tripSummary?.days === 1 ? "day" : "days"} ·{" "}
+              {tripSummary?.source} → {tripSummary?.destination}
+              {tripSummary?.travel_mode ? ` · ${tripSummary.travel_mode}` : ""}
+            </p>
             <button
               onClick={handleGenerateItinerary}
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded disabled:cursor-not-allowed"
+              className="btn-primary w-full sm:w-auto sm:px-10"
             >
-              {loading ? "Generating..." : "✨ Generate My Itinerary"}
+              ✨ Generate My Itinerary
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ====================================================================== */}
-        {/* LOADING STATE */}
-        {/* ====================================================================== */}
-        {loading && (
-          <div className="bg-white border border-blue-200 rounded-lg p-8 text-center">
-            <div className="text-4xl mb-4">🤖</div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
-              Generating Your Itinerary
-            </h3>
-            <p className="text-gray-600">
-              AI is crafting your {configuration.trip_summary.days}-day
-              itinerary for {configuration.trip_summary.destination}...
-            </p>
-            <p className="text-sm text-gray-500 mt-4">
-              This may take 10-30 seconds
-            </p>
+      {/* ================================================================== */}
+      {/* LOADING */}
+      {/* ================================================================== */}
+      {loading && <LoadingSkeleton destination={tripSummary?.destination} />}
+
+      {/* ================================================================== */}
+      {/* ERROR */}
+      {/* ================================================================== */}
+      {error && !loading && (
+        <ErrorState
+          kind={error.kind}
+          detail={error.detail}
+          onRetry={handleGenerateItinerary}
+        />
+      )}
+
+      {/* ================================================================== */}
+      {/* ITINERARY */}
+      {/* ================================================================== */}
+      {itinerary && !loading && (
+        <div className="max-w-7xl mx-auto px-4 pb-16">
+          <div className="pt-6">
+            <HeroBanner
+              destination={itinerary.destination}
+              days={itinerary.days}
+              source={tripSummary?.source}
+              travelMode={tripSummary?.travel_mode}
+              budgetLabel={
+                budgetTier
+                  ? `${budgetTier.charAt(0).toUpperCase()}${budgetTier.slice(1)} Budget`
+                  : undefined
+              }
+              styleLabel={styleLabel || undefined}
+              groupType={getField(configuration, "group_type")}
+            />
+
+            <TripStats
+              days={itinerary.days}
+              placesCovered={placesCovered}
+              budgetDisplay={budgetDisplay}
+              distanceKm={getField(tripSummary, "distance_km")}
+            />
           </div>
-        )}
 
-        {/* ====================================================================== */}
-        {/* ERROR STATE */}
-        {/* ====================================================================== */}
-        {error && (
-          <div className="bg-white border border-red-300 rounded-lg p-6 mb-6">
-            <div className="flex items-start gap-4">
-              <div className="text-2xl">❌</div>
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900 mb-1">
-                  Generation Failed
-                </h3>
-                <p className="text-sm text-red-700 mb-4">{error}</p>
-                <button
-                  onClick={handleGenerateItinerary}
-                  className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded"
-                >
-                  Try Again
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ====================================================================== */}
-        {/* ITINERARY DISPLAY */}
-        {/* ====================================================================== */}
-        {itinerary && (
-          <div className="space-y-6">
-            {/* Trip Header */}
-            <div className="bg-white border border-gray-300 rounded-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    {itinerary.destination} - {itinerary.days} Days
-                  </h2>
-                  <p className="text-gray-600 mt-1 capitalize">
-                    {itinerary.overall_style.pace} pace •{" "}
-                    {itinerary.overall_style.budget} budget
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 mb-4">
-                {configuration.interests.slice(0, 6).map((interest, idx) => (
-                  <span
-                    key={idx}
-                    className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm"
-                  >
-                    {interest}
-                  </span>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-4">
-                <button
-                  onClick={() => setShowRawJson(!showRawJson)}
-                  className="bg-gray-700 hover:bg-gray-800 text-white font-semibold py-2 px-4 rounded text-sm"
-                >
-                  {showRawJson ? "Hide" : "Show"} Raw JSON
-                </button>
-
-                <button
-                  onClick={handleGenerateItinerary}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded text-sm"
-                >
-                  🔄 Regenerate
-                </button>
-
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(
-                      JSON.stringify(itinerary, null, 2)
-                    );
-                    alert("Itinerary JSON copied!");
-                  }}
-                  className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded text-sm"
-                >
-                  📋 Copy JSON
-                </button>
-              </div>
+          <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_300px] gap-6 items-start">
+            {/* LEFT SIDEBAR */}
+            <div className="hidden lg:flex flex-col gap-5">
+              <DayNavigator
+                days={itinerary.itinerary}
+                activeDay={activeDayInView}
+                onSelectDay={handleSelectDay}
+              />
+              <BudgetSummaryCard
+                budgetTier={budgetTier}
+                breakdown={budgetBreakdown}
+              />
+              <WeatherCard
+                weather={getField(itinerary, "weather", "weather_snapshot")}
+              />
             </div>
 
-            {/* Raw JSON View */}
-            {showRawJson && (
-              <div className="bg-gray-900 rounded-lg p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-white font-bold text-sm">
-                    Raw JSON Response
-                  </h3>
-                  <button
-                    onClick={() => setShowRawJson(false)}
-                    className="text-gray-400 hover:text-white text-lg"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <pre className="text-green-400 text-xs font-mono overflow-auto max-h-96">
-                  {JSON.stringify(itinerary, null, 2)}
-                </pre>
-              </div>
-            )}
+            {/* MAIN TIMELINE */}
+            <div className="flex flex-col gap-5">
+              {itinerary.itinerary.map((day) => (
+                <DayCard
+                  key={day.day}
+                  day={day}
+                  isExpanded={expandedDay === day.day}
+                  onToggle={() =>
+                    setExpandedDay(expandedDay === day.day ? null : day.day)
+                  }
+                  registerRef={registerDayRef(day.day)}
+                />
+              ))}
+            </div>
 
-            {/* ================================================================== */}
-            {/* DAY-BY-DAY ITINERARY */}
-            {/* ================================================================== */}
-            {itinerary.itinerary.map((day, dayIdx) => (
-              <div
-                key={dayIdx}
-                className="bg-white border border-gray-300 rounded-lg overflow-hidden"
+            {/* RIGHT SIDEBAR */}
+            <div className="flex flex-col gap-5">
+              <MustVisitSection source={itinerary} />
+              <FoodSection source={itinerary} />
+              <TravelTips source={itinerary} />
+              <EssentialInfo source={itinerary} />
+            </div>
+          </div>
+
+          {/* ADDITIONAL INFORMATION — fully dynamic */}
+          <AdditionalInfoSection itinerary={itinerary} />
+
+          {/* ACTION FOOTER */}
+          <div className="card-elevation p-6 sm:p-8 text-center mt-10">
+            <p className="text-sm font-body text-slate-500 mb-4">
+              Your itinerary is ready. Generate another version or head back to
+              adjust your preferences.
+            </p>
+            <div className="flex flex-wrap gap-3 justify-center">
+              <button
+                onClick={handleGenerateItinerary}
+                className="btn-primary px-6"
               >
-                {/* DAY HEADER - PROMINENT */}
-                <div className="bg-gray-800 text-white p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-2xl font-bold text-gray-800">
-                        {day.day}
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold mb-1">
-                        {day.day_theme}
-                      </h3>
-                      <p className="text-gray-300 text-sm">{day.day_summary}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ACTIVITY BLOCKS */}
-                <div className="divide-y divide-gray-200">
-                  {day.blocks.map((block, blockIdx) => (
-                    <div key={blockIdx} className="p-6">
-                      {/* BLOCK HEADER - PERIOD + TIME + ACTIVITY TYPE */}
-                      <div className="flex items-start gap-4 mb-4">
-                        <div className="text-3xl flex-shrink-0">
-                          {getPeriodIcon(block.period)}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
-                              {block.period}
-                            </span>
-                            <span className="text-gray-400">•</span>
-                            <span className="text-sm text-gray-600 font-medium">
-                              {block.time_window}
-                            </span>
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-semibold border ${getActivityBadge(
-                                block.activity_type
-                              )}`}
-                            >
-                              {block.activity_type}
-                            </span>
-                          </div>
-
-                          {/* ACTIVITY TITLE */}
-                          <h4 className="text-lg font-bold text-gray-900 mb-2">
-                            {block.title}
-                          </h4>
-
-                          {/* DESCRIPTION */}
-                          <p className="text-gray-700 leading-relaxed">
-                            {block.description}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* OPTIONAL FIELDS - GRID LAYOUT */}
-                      <div className="grid grid-cols-1 gap-3 mt-4 ml-16">
-                        {/* MEAL INFO */}
-                        {block.meal && block.meal.meal_type !== "none" && (
-                          <div className="bg-orange-50 border border-orange-200 rounded p-3">
-                            <div className="flex items-start gap-2">
-                              <span className="text-lg">🍽️</span>
-                              <div className="flex-1">
-                                <div className="text-xs font-bold text-orange-900 uppercase mb-1">
-                                  {block.meal.meal_type}
-                                </div>
-                                <p className="text-sm text-orange-800 capitalize">
-                                  {block.meal.cuisine_type} •{" "}
-                                  {block.meal.dining_style}
-                                  {block.meal.veg_friendly &&
-                                    " • 🌱 Veg-friendly"}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* LOGISTICS HINT */}
-                        {block.logistics_hint && (
-                          <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                            <div className="flex items-start gap-2">
-                              <span className="text-lg">💡</span>
-                              <div className="flex-1">
-                                <div className="text-xs font-bold text-blue-900 uppercase mb-1">
-                                  Logistics
-                                </div>
-                                <p className="text-sm text-blue-800">
-                                  {block.logistics_hint}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* PHOTOGRAPHY NOTE */}
-                        {block.photography_note &&
-                          block.photography_note !== "None." && (
-                            <div className="bg-purple-50 border border-purple-200 rounded p-3">
-                              <div className="flex items-start gap-2">
-                                <span className="text-lg">📸</span>
-                                <div className="flex-1">
-                                  <div className="text-xs font-bold text-purple-900 uppercase mb-1">
-                                    Photography Tip
-                                  </div>
-                                  <p className="text-sm text-purple-800">
-                                    {block.photography_note}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-
-            {/* FOOTER */}
-            <div className="bg-white border border-gray-200 rounded-lg p-6 text-center">
-              <p className="text-gray-600 mb-4">
-                Your itinerary is ready. Generate another version or return to
-                configuration.
-              </p>
-              <div className="flex flex-wrap gap-3 justify-center">
-                <button
-                  onClick={handleGenerateItinerary}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded"
-                >
-                  🔄 Generate Another
-                </button>
-                <button
-                  onClick={() => (window.location.href = "/trip-configuration")}
-                  className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded"
-                >
-                  ← Back to Config
-                </button>
-              </div>
+                🔄 Generate Another
+              </button>
+              <button
+                onClick={() => (window.location.href = "/trip-configuration")}
+                className="px-6 py-2.5 rounded-2xl text-sm font-semibold font-body text-slate-600 border-2 border-slate-200 hover:border-slate-300 transition-colors"
+              >
+                ← Back to Configuration
+              </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

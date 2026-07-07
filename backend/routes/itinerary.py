@@ -18,6 +18,8 @@ ENHANCED SCHEMA (v2.0):
 - Photography and logistics hints
 """
 
+from logging import config
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, validator, field_validator
 from typing import List, Optional, Dict, Any, Literal
@@ -29,6 +31,22 @@ router = APIRouter()
 
 # Initialize Gemini
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+# ============================================================================
+# MODEL MAP
+# ============================================================================
+
+MODEL_MAP = {
+    "flash_lite": "models/gemini-2.5-flash-lite",
+    "flash": "models/gemini-2.5-flash",
+    "flash_plus": "models/gemini-3.5-flash",
+
+    # Backward compatibility
+    "gemini-flash-latest": "models/gemini-2.5-flash",
+    "gemini-2.5-flash": "models/gemini-2.5-flash",
+    "gemini-3.5-flash": "models/gemini-3.5-flash",
+    "gemini-2.5-flash-lite": "models/gemini-2.5-flash-lite",
+}
 
 # ============================================================================
 # ENHANCED REQUEST/RESPONSE SCHEMAS (v2.0)
@@ -496,7 +514,17 @@ async def generate_itinerary(config: ItineraryRequest):
         # ====================================================================
         # STEP 2: CALL GEMINI API
         # ====================================================================
-        model = genai.GenerativeModel(config.ai_model)
+        model_name = MODEL_MAP.get(
+        config.ai_model,
+        MODEL_MAP["flash_lite"]
+        )
+
+        print("=" * 60)
+        print(f"Requested Model : {config.ai_model}")
+        print(f"Resolved Model  : {model_name}")
+        print("=" * 60)
+
+        model = genai.GenerativeModel(model_name)
         
         response = model.generate_content(
             prompt,
@@ -593,8 +621,9 @@ async def itinerary_health():
             "logistics_hints"
         ],
         "supported_models": [
-            "gemini-flash-latest",
-            "gemini-2.5-flash"
+            "flash_lite",
+            "flash",
+            "flash_plus"
         ],
         "max_days": 30,
         "dependencies": ["Module 5 configuration"]
@@ -638,7 +667,7 @@ POST /api/itinerary
     "vegetarian_friendly": true,
     "photography_focus": true
   },
-  "ai_model": "gemini-flash-latest"
+  "ai_model": "flash_lite"
 }
 
 To test manually:

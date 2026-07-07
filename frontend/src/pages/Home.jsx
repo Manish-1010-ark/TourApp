@@ -7,14 +7,19 @@ import {
   Mail,
   User,
   Compass,
-  Route,
-  Building2,
+  Sparkles,
+  Globe,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
-import { signIn, signUp } from "../services/authService";
+import {
+  signIn,
+  signUp,
+  getRedirectPathForUser,
+} from "../services/authService";
 import { useNavigate } from "react-router-dom";
 import InstallPWAButton from "../components/InstallPWAButton";
+import { useGlobalStyles } from "../hooks/useGlobalStyles";
 
 // Background slideshow images — Indian travel destinations.
 // `coords` feeds the waypoint tag in the hero (see WaypointTag below) —
@@ -90,21 +95,21 @@ const FEATURED_STATES = [
 const HOW_IT_WORKS = [
   {
     tag: "WAYPOINT 01",
-    title: "Tell us who you're building for",
-    body: "Connect your brand — hotel, DMO, or travel agency — and Traviora takes on your identity, not the other way round.",
-    icon: Building2,
-  },
-  {
-    tag: "WAYPOINT 02",
-    title: "Set the shape of the trip",
-    body: "Dates, budget, pace, interests. The traveler answers a few questions; you don't lift a finger.",
+    title: "Tell us about your trip",
+    body: "Source, destination, dates, budget, group size, and what you're into. Takes under a minute.",
     icon: Compass,
   },
   {
+    tag: "WAYPOINT 02",
+    title: "Let AI build your itinerary",
+    body: "Gemini drafts a day-by-day plan — stays, food, transport, and a budget breakdown — in seconds.",
+    icon: Sparkles,
+  },
+  {
     tag: "WAYPOINT 03",
-    title: "Launch a living itinerary",
-    body: "Traviora drafts a day-by-day route in seconds, ready for the traveler to reshape on the fly.",
-    icon: Route,
+    title: "Explore before you go",
+    body: "Walk through destinations in 360°, ask the AI assistant follow-up questions, and share the plan with whoever's coming along.",
+    icon: Globe,
   },
 ];
 
@@ -112,44 +117,13 @@ const SLIDE_INTERVAL_MS = 6000;
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-// Injects the custom-scrollbar CSS and the two display fonts once into
-// <head>, no matter how many times <Home /> mounts.
-function useGlobalStyles() {
-  useEffect(() => {
-    const STYLE_ID = "traviora-custom-scrollbar";
-    if (!document.getElementById(STYLE_ID)) {
-      const style = document.createElement("style");
-      style.id = STYLE_ID;
-      style.textContent = `
-        html, body { margin: 0; padding: 0; width: 100%; overflow-x: hidden; }
-        #root, #app { margin: 0; padding: 0; }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(249,115,22,0.4); border-radius: 10px; }
-        .font-display { font-family: 'Fraunces', 'ui-serif', Georgia, serif; font-optical-sizing: auto; }
-        .font-mono-tag { font-family: 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: 0.08em; }
-      `;
-      document.head.appendChild(style);
-    }
-
-    const FONT_ID = "traviora-fonts";
-    if (!document.getElementById(FONT_ID)) {
-      const link = document.createElement("link");
-      link.id = FONT_ID;
-      link.rel = "stylesheet";
-      link.href =
-        "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500&display=swap";
-      document.head.appendChild(link);
-    }
-  }, []);
-}
-
 // Reusable labeled input so the login/register forms don't repeat markup.
 function Field({ label, type = "text", name, autoComplete, ...rest }) {
   return (
     <div>
       <label
         htmlFor={name}
-        className="block mb-2 text-xs font-bold tracking-wider text-gray-400 uppercase"
+        className="block mb-2 text-xs font-bold tracking-wider text-[var(--color-body)] uppercase"
       >
         {label}
       </label>
@@ -159,7 +133,7 @@ function Field({ label, type = "text", name, autoComplete, ...rest }) {
         type={type}
         autoComplete={autoComplete}
         required
-        className="w-full px-4 py-3 text-white placeholder-gray-500 transition-colors border rounded-xl bg-white/5 border-white/10 focus:border-orange-500 focus:outline-none"
+        className="w-full px-4 py-3 text-[var(--color-headings)] placeholder-slate-400 transition-colors border rounded-xl bg-[var(--color-bg-secondary)] border-slate-200 focus:border-[var(--color-primary)] focus:outline-none"
         {...rest}
       />
     </div>
@@ -243,10 +217,11 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
 
       if (mode === "login") {
         setStatus("success");
+        const destination = getRedirectPathForUser(result.data.user);
         setTimeout(() => {
           onClose();
           e.target.reset();
-          navigate("/trip-prep");
+          navigate(destination);
         }, 1000);
       } else {
         // Registration succeeded, but the account still needs the traveler
@@ -302,7 +277,7 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
         return;
       }
       onClose();
-      navigate("/trip-prep");
+      navigate(getRedirectPathForUser(result.data.user));
     } catch (err) {
       alert(err.message);
     } finally {
@@ -317,7 +292,7 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md transition-opacity duration-300 ${
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-md transition-opacity duration-300 ${
         visible ? "opacity-100" : "pointer-events-none opacity-0"
       }`}
     >
@@ -326,7 +301,7 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`relative w-full max-w-md transform rounded-3xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl transition-all duration-300 ${
+        className={`card-elevation relative w-full max-w-md transform rounded-3xl bg-white p-8 transition-all duration-300 ${
           visible ? "scale-100" : "scale-95"
         }`}
       >
@@ -334,18 +309,20 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute p-2 text-xl text-gray-400 top-4 right-4 hover:text-white"
+          className="absolute p-2 text-xl text-slate-400 top-4 right-4 hover:text-[var(--color-headings)]"
         >
           <X size={20} />
         </button>
 
         {status === "success" && (
           <div className="flex flex-col items-center py-8 text-center">
-            <span className="flex items-center justify-center w-14 h-14 mb-4 rounded-full bg-orange-600/20">
-              <Check size={28} className="text-orange-500" />
+            <span className="flex items-center justify-center w-14 h-14 mb-4 rounded-full bg-emerald-50">
+              <Check size={28} className="text-[var(--color-success)]" />
             </span>
-            <h2 className="text-xl font-bold text-white">Welcome back!</h2>
-            <p className="mt-2 text-sm text-gray-400">
+            <h2 className="text-xl font-bold text-[var(--color-headings)]">
+              Welcome back!
+            </h2>
+            <p className="mt-2 text-sm text-[var(--color-body)]">
               Taking you to trip prep…
             </p>
           </div>
@@ -353,15 +330,18 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
 
         {status === "confirm-email" && (
           <div className="flex flex-col items-center py-4 text-center">
-            <span className="flex items-center justify-center w-14 h-14 mb-4 rounded-full bg-orange-600/20">
-              <Mail size={26} className="text-orange-500" />
+            <span className="flex items-center justify-center w-14 h-14 mb-4 rounded-full bg-[var(--color-bg-secondary)]">
+              <Mail size={26} className="text-[var(--color-primary)]" />
             </span>
-            <h2 id={titleId} className="text-xl font-bold text-white">
+            <h2
+              id={titleId}
+              className="text-xl font-bold text-[var(--color-headings)]"
+            >
               Confirm your email
             </h2>
-            <p className="max-w-xs mt-2 text-sm text-gray-400">
+            <p className="max-w-xs mt-2 text-sm text-[var(--color-body)]">
               We've sent a confirmation link to{" "}
-              <span className="font-semibold text-gray-200">
+              <span className="font-semibold text-[var(--color-headings)]">
                 {pendingCreds?.email}
               </span>
               . Open it, then come back here to continue.
@@ -371,7 +351,7 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
               type="button"
               onClick={handleContinueAfterConfirm}
               disabled={loading}
-              className="w-full py-3 mt-6 font-bold text-white transition bg-orange-600 shadow-lg rounded-xl shadow-orange-600/20 hover:bg-orange-700 disabled:opacity-60"
+              className="btn-primary w-full mt-6 disabled:opacity-60"
             >
               {loading ? "Checking…" : "I've confirmed — Continue"}
             </button>
@@ -380,7 +360,7 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
               type="button"
               onClick={handleResend}
               disabled={resending}
-              className="mt-3 text-xs font-semibold text-gray-400 hover:text-orange-400 disabled:opacity-60"
+              className="mt-3 text-xs font-semibold text-[var(--color-body)] hover:text-[var(--color-cta)] disabled:opacity-60"
             >
               {resending
                 ? "Sending…"
@@ -395,14 +375,14 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
           <>
             <h2
               id={titleId}
-              className="mb-2 text-3xl font-extrabold text-white"
+              className="mb-2 text-3xl font-extrabold text-[var(--color-headings)] font-display"
             >
               {isLogin ? "Welcome Back" : "Create Account"}
             </h2>
-            <p className="mb-6 text-sm text-gray-400">
+            <p className="mb-6 text-sm text-[var(--color-body)]">
               {isLogin
-                ? "Login to access your personalized smart itineraries."
-                : "Sign up to begin designing custom trip routes instantly."}
+                ? "Login to access your personalized AI itineraries."
+                : "Sign up to start planning your next trip with AI."}
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -433,7 +413,7 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
                 <div className="text-right">
                   <a
                     href="#forgot-password"
-                    className="text-xs text-orange-400 hover:underline"
+                    className="text-xs text-[var(--color-primary)] hover:underline"
                   >
                     Forgot password?
                   </a>
@@ -444,9 +424,12 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
                     type="checkbox"
                     required
                     id="terms"
-                    className="accent-orange-500"
+                    className="accent-[var(--color-primary)]"
                   />
-                  <label htmlFor="terms" className="text-xs text-gray-400">
+                  <label
+                    htmlFor="terms"
+                    className="text-xs text-[var(--color-body)]"
+                  >
                     I agree to the Terms of Service & Privacy Policy
                   </label>
                 </div>
@@ -455,18 +438,18 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 mt-2 font-bold text-white transition bg-orange-600 shadow-lg rounded-xl shadow-orange-600/20 hover:bg-orange-700 disabled:opacity-60"
+                className="btn-primary w-full mt-2 disabled:opacity-60"
               >
                 {loading ? "Please wait..." : isLogin ? "Sign In" : "Sign Up"}
               </button>
             </form>
 
-            <p className="mt-6 text-sm text-center text-gray-400">
+            <p className="mt-6 text-sm text-center text-[var(--color-body)]">
               {isLogin ? "Don't have an account?" : "Already have an account?"}
               <button
                 type="button"
                 onClick={() => onSwitch(isLogin ? "register" : "login")}
-                className="ml-1 font-semibold text-orange-400 hover:underline"
+                className="ml-1 font-semibold text-[var(--color-primary)] hover:underline"
               >
                 {isLogin ? "Register instead" : "Login instead"}
               </button>
@@ -484,7 +467,7 @@ function AuthModal({ mode, visible, onClose, onSwitch }) {
 function WaypointTag({ slide, index, total }) {
   return (
     <div className="items-center hidden gap-3 px-4 py-2 border rounded-full sm:inline-flex border-white/15 bg-black/30 backdrop-blur-sm font-mono-tag">
-      <span className="text-orange-400">
+      <span className="text-[var(--color-cta)]">
         {String(index + 1).padStart(2, "0")}/{String(total).padStart(2, "0")}
       </span>
       <span className="w-px h-3 bg-white/20" aria-hidden="true" />
@@ -497,7 +480,7 @@ function WaypointTag({ slide, index, total }) {
 
 function SectionEyebrow({ children }) {
   return (
-    <span className="inline-block mb-4 text-xs font-semibold tracking-[0.2em] text-orange-400 uppercase font-mono-tag">
+    <span className="inline-block mb-4 text-xs font-semibold tracking-[0.2em] text-[var(--color-cta)] uppercase font-mono-tag">
       {children}
     </span>
   );
@@ -566,7 +549,7 @@ export default function Home() {
   const currentSlide = SLIDES[slideIndex];
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden font-sans text-white bg-gray-900 select-none">
+    <div className="relative min-h-screen overflow-x-hidden font-body bg-[var(--color-bg)] select-none">
       {/* Background Carousel */}
       <div className="fixed inset-0 z-0" aria-hidden="true">
         {SLIDES.map((slide, i) => (
@@ -574,7 +557,7 @@ export default function Home() {
             key={slide.url}
             className="absolute inset-0 bg-center bg-cover transition-opacity duration-1000 ease-in-out"
             style={{
-              backgroundImage: `linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)), url('${slide.url}')`,
+              backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.35), rgba(15,23,42,0.55)), url('${slide.url}')`,
               opacity: i === slideIndex ? 1 : 0,
             }}
           />
@@ -595,7 +578,7 @@ export default function Home() {
               type="button"
               onClick={() => navigate("/profile")}
               aria-label="Go to profile"
-              className="p-2 transition rounded-full hover:bg-white/10 hover:text-orange-500"
+              className="p-2 text-white transition rounded-full hover:bg-white/10 hover:text-[var(--color-cta)]"
             >
               <User size={22} />
             </button>
@@ -605,7 +588,7 @@ export default function Home() {
               onClick={() => setDrawerOpen(true)}
               aria-label="Open menu"
               aria-expanded={drawerOpen}
-              className="p-2 text-2xl transition hover:text-orange-500"
+              className="p-2 text-2xl text-white transition hover:text-[var(--color-cta)]"
             >
               <Menu size={26} />
             </button>
@@ -619,7 +602,7 @@ export default function Home() {
         aria-modal="true"
         aria-label="Site navigation"
         aria-hidden={!drawerOpen}
-        className={`fixed top-0 right-0 z-50 h-full w-80 transform overflow-y-auto border-l border-white/10 bg-black/95 shadow-2xl transition-transform duration-300 custom-scrollbar ${
+        className={`fixed top-0 right-0 z-50 h-full w-80 transform overflow-y-auto border-l border-black/5 bg-white shadow-2xl transition-transform duration-300 custom-scrollbar ${
           drawerOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -628,7 +611,7 @@ export default function Home() {
             type="button"
             onClick={closeDrawer}
             aria-label="Close menu"
-            className="p-2 text-2xl text-gray-400 hover:text-white"
+            className="p-2 text-2xl text-slate-400 hover:text-[var(--color-headings)]"
           >
             <X size={24} />
           </button>
@@ -637,14 +620,14 @@ export default function Home() {
           <a
             href="#home"
             onClick={closeDrawer}
-            className="text-orange-500 transition"
+            className="text-[var(--color-primary)] transition"
           >
             HOME
           </a>
           <a
             href="#how-it-works"
             onClick={closeDrawer}
-            className="text-gray-300 transition hover:text-orange-500"
+            className="text-[var(--color-body)] transition hover:text-[var(--color-primary)]"
           >
             HOW IT WORKS
           </a>
@@ -654,9 +637,9 @@ export default function Home() {
               type="button"
               onClick={() => setDestinationOpen((prev) => !prev)}
               aria-expanded={destinationOpen}
-              className="flex items-center justify-between w-full text-gray-300 transition hover:text-orange-500"
+              className="flex items-center justify-between w-full text-[var(--color-body)] transition hover:text-[var(--color-primary)]"
             >
-              <span>DESTINATION</span>
+              <span>DESTINATIONS</span>
               <ChevronDown
                 size={14}
                 className={`transition-transform duration-300 ${destinationOpen ? "rotate-180" : ""}`}
@@ -664,13 +647,13 @@ export default function Home() {
             </button>
 
             {destinationOpen && (
-              <div className="flex flex-col pl-4 mt-3 space-y-3 text-xs font-semibold tracking-normal text-gray-400 normal-case border-l max-h-64 overflow-y-auto border-white/10 custom-scrollbar">
+              <div className="flex flex-col pl-4 mt-3 space-y-3 text-xs font-semibold tracking-normal text-slate-400 normal-case border-l max-h-64 overflow-y-auto border-slate-200 custom-scrollbar">
                 {INDIAN_STATES.map((state) => (
                   <a
                     key={state}
                     href={`#${state.toLowerCase().replace(/\s+&?\s*/g, "-")}`}
                     onClick={closeDrawer}
-                    className="transition hover:text-white"
+                    className="transition hover:text-[var(--color-headings)]"
                   >
                     {state}
                   </a>
@@ -678,20 +661,12 @@ export default function Home() {
               </div>
             )}
           </div>
-
-          <a
-            href="#about"
-            onClick={closeDrawer}
-            className="text-gray-300 transition hover:text-orange-500"
-          >
-            ABOUT
-          </a>
         </nav>
       </div>
       {drawerOpen && (
         <div
           onClick={closeDrawer}
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm"
         />
       )}
 
@@ -707,29 +682,29 @@ export default function Home() {
             total={SLIDES.length}
           />
 
-          <h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl font-display">
-            An AI Itinerary Builder <br /> For Your Website
+          <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-6xl lg:text-7xl font-display">
+            Plan it with AI. <br /> Explore it in 360°.
           </h1>
-          <p className="max-w-2xl mx-auto text-base text-gray-200 md:text-lg">
-            A white-label AI itinerary builder designed for destination
-            organizations, hotels, and travel brands. Deliver personalized
-            travel experiences.
+          <p className="max-w-2xl mx-auto text-base text-gray-100 md:text-lg">
+            Tell Traviora your dates, budget, and interests — get a personalized
+            day-by-day itinerary, then step inside your destinations before you
+            ever book a ticket.
           </p>
 
           <div className="flex items-center justify-center gap-4 pt-4">
             <button
               type="button"
               onClick={() => openAuth("login")}
-              className="min-w-[140px] rounded-xl border border-white/20 bg-white/10 px-8 py-3 font-bold text-white transition duration-300 backdrop-blur-xs hover:bg-white/20"
+              className="min-w-[140px] rounded-xl border border-white/30 bg-white/10 px-8 py-3 font-bold text-white transition duration-300 backdrop-blur-xs hover:bg-white/20"
             >
               Login
             </button>
             <button
               type="button"
               onClick={() => openAuth("register")}
-              className="min-w-[140px] rounded-xl bg-orange-600 px-8 py-3 font-bold text-white shadow-lg shadow-orange-600/20 transition duration-300 hover:bg-orange-700"
+              className="min-w-[140px] rounded-xl bg-[var(--color-cta)] px-8 py-3 font-bold text-white shadow-lg shadow-amber-900/20 transition duration-300 hover:brightness-95"
             >
-              Register User
+              Start Planning
             </button>
           </div>
         </div>
@@ -747,7 +722,7 @@ export default function Home() {
       {/* How It Works */}
       <section
         id="how-it-works"
-        className="relative z-30 px-6 py-24 bg-gray-950 border-t border-white/10"
+        className="relative z-30 px-6 py-24 bg-white border-t border-black/5"
       >
         <div className="mx-auto text-center max-w-7xl">
           <SectionEyebrow>The Route To Launch</SectionEyebrow>
@@ -760,7 +735,7 @@ export default function Home() {
           {/* connecting route line, desktop only */}
           <div
             aria-hidden="true"
-            className="absolute hidden h-px border-t border-dashed md:block top-8 left-[16.5%] right-[16.5%] border-orange-500/30"
+            className="absolute hidden h-px border-t border-dashed md:block top-8 left-[16.5%] right-[16.5%] border-amber-300/60"
           />
           {HOW_IT_WORKS.map(({ tag, title, body, icon: Icon }) => (
             <motion.div
@@ -771,64 +746,77 @@ export default function Home() {
               transition={{ duration: 0.5 }}
               className="relative flex flex-col items-center px-4 text-center"
             >
-              <span className="relative z-10 flex items-center justify-center w-16 h-16 mb-6 border rounded-full bg-gray-900 border-orange-500/40">
-                <Icon size={26} className="text-orange-400" />
+              <span className="relative z-10 flex items-center justify-center w-16 h-16 mb-6 rounded-full bg-[var(--color-bg-secondary)]">
+                <Icon size={26} className="text-[var(--color-primary)]" />
               </span>
-              <span className="mb-2 text-xs font-semibold text-orange-400 font-mono-tag">
+              <span className="mb-2 text-xs font-semibold text-[var(--color-cta)] font-mono-tag">
                 {tag}
               </span>
-              <h3 className="mb-2 text-lg font-bold text-white">{title}</h3>
-              <p className="text-sm text-gray-400">{body}</p>
+              <h3 className="mb-2 text-lg font-bold text-[var(--color-headings)]">
+                {title}
+              </h3>
+              <p className="text-sm text-[var(--color-body)]">{body}</p>
             </motion.div>
           ))}
         </div>
       </section>
 
-      {/* Built for travel brands */}
-      <section className="relative z-30 px-6 py-24 border-t bg-gray-900 border-white/10">
+      {/* Why Traviora */}
+      <section className="relative z-30 px-6 py-24 border-t bg-gradient-to-b from-[var(--color-bg-secondary)] to-white border-black/5">
         <div className="grid max-w-6xl gap-12 mx-auto md:grid-cols-2 md:items-center">
           <div>
-            <SectionEyebrow>Built White-Label</SectionEyebrow>
+            <SectionEyebrow>Why Traviora</SectionEyebrow>
             <h2 className="mb-4 text-3xl font-bold sm:text-4xl font-display">
-              Your brand up front. Traviora underneath.
+              One platform, not a dozen browser tabs.
             </h2>
-            <p className="mb-6 text-gray-400">
-              Every itinerary, email, and confirmation screen carries your name
-              — travelers never see "Traviora" unless you want them to.
+            <p className="mb-6 text-[var(--color-body)]">
+              No more juggling booking sites, review blogs, and group chats just
+              to plan one trip. Traviora bundles AI planning, destination
+              exploration, and your travel circle into a single app.
             </p>
             <ul className="space-y-4 text-sm">
               <li className="flex items-start gap-3">
-                <Check size={18} className="mt-0.5 text-orange-500 shrink-0" />
-                <span className="text-gray-300">
-                  Every Indian state covered, day one — no region left unmapped.
+                <Check
+                  size={18}
+                  className="mt-0.5 text-[var(--color-success)] shrink-0"
+                />
+                <span className="text-[var(--color-body)]">
+                  AI itineraries tailored to your budget, dates, and interests —
+                  not a generic top-10 list.
                 </span>
               </li>
               <li className="flex items-start gap-3">
-                <Check size={18} className="mt-0.5 text-orange-500 shrink-0" />
-                <span className="text-gray-300">
-                  Drop-in embed, so it lives on your site instead of sending
-                  travelers elsewhere.
+                <Check
+                  size={18}
+                  className="mt-0.5 text-[var(--color-success)] shrink-0"
+                />
+                <span className="text-[var(--color-body)]">
+                  An embedded 360° photo viewer lets you walk through a
+                  destination before you ever book it.
                 </span>
               </li>
               <li className="flex items-start gap-3">
-                <Check size={18} className="mt-0.5 text-orange-500 shrink-0" />
-                <span className="text-gray-300">
-                  Installable as an app, so returning travelers open it like any
-                  other icon on their phone.
+                <Check
+                  size={18}
+                  className="mt-0.5 text-[var(--color-success)] shrink-0"
+                />
+                <span className="text-[var(--color-body)]">
+                  Plan together — invite friends, share the itinerary, and swap
+                  tips through community travel blogs.
                 </span>
               </li>
             </ul>
           </div>
 
-          <div className="relative overflow-hidden border rounded-3xl border-white/10 aspect-square md:aspect-auto md:h-96">
+          <div className="relative overflow-hidden card-elevation rounded-3xl aspect-square md:aspect-auto md:h-96">
             <img
               src={SLIDES[2].url}
-              alt="Goa coastline, one of the destinations Traviora can route travelers to"
+              alt="Goa coastline, one of the destinations Traviora can build an itinerary for"
               className="object-cover w-full h-full"
               loading="lazy"
             />
-            <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
-              <span className="text-xs font-mono-tag text-gray-300">
+            <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/70 to-transparent">
+              <span className="text-xs font-mono-tag text-gray-100">
                 {SLIDES[2].label} · {SLIDES[2].coords}
               </span>
             </div>
@@ -838,13 +826,13 @@ export default function Home() {
 
       {/* Explore by state */}
       <section
-        id="about"
-        className="relative z-30 px-6 py-24 border-t bg-gray-950 border-white/10"
+        id="destinations"
+        className="relative z-30 px-6 py-24 border-t bg-white border-black/5"
       >
         <div className="mx-auto text-center max-w-7xl">
           <SectionEyebrow>Destinations</SectionEyebrow>
           <h2 className="max-w-2xl mx-auto text-3xl font-bold sm:text-4xl font-display">
-            Wherever your travelers are headed, there's already a route
+            Wherever you're headed, there's already a route
           </h2>
         </div>
 
@@ -853,7 +841,7 @@ export default function Home() {
             <a
               key={state}
               href={`#${state.toLowerCase().replace(/\s+&?\s*/g, "-")}`}
-              className="px-4 py-5 text-sm font-semibold text-center transition border rounded-2xl border-white/10 bg-white/5 hover:border-orange-500/50 hover:bg-white/10"
+              className="px-4 py-5 text-sm font-semibold text-center transition border rounded-2xl border-slate-200 bg-[var(--color-bg-secondary)] hover:border-[var(--color-primary)]/50 hover:bg-white hover:shadow-md"
             >
               {state}
             </a>
@@ -864,7 +852,7 @@ export default function Home() {
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
-            className="text-sm font-semibold text-orange-400 hover:underline"
+            className="text-sm font-semibold text-[var(--color-primary)] hover:underline"
           >
             See all {INDIAN_STATES.length} states →
           </button>
@@ -872,39 +860,45 @@ export default function Home() {
       </section>
 
       {/* Final CTA */}
-      <section className="relative z-30 px-6 py-24 text-center border-t bg-gray-900 border-white/10">
+      <section className="relative z-30 px-6 py-24 text-center border-t bg-gradient-to-b from-white to-[var(--color-bg-secondary)] border-black/5">
         <div className="max-w-2xl mx-auto">
           <h2 className="mb-4 text-3xl font-bold sm:text-4xl font-display">
-            Ready to put a route in front of your travelers?
+            Ready to plan your next trip?
           </h2>
-          <p className="mb-8 text-gray-400">
-            Register your brand and have a live itinerary builder embedded
-            before the day is out.
+          <p className="mb-8 text-[var(--color-body)]">
+            Create your free account and get a personalized AI itinerary in
+            minutes.
           </p>
           <button
             type="button"
             onClick={() => openAuth("register")}
-            className="rounded-xl bg-orange-600 px-8 py-3.5 font-bold text-white shadow-lg shadow-orange-600/20 transition duration-300 hover:bg-orange-700"
+            className="btn-primary"
           >
-            Register User
+            Create Free Account
           </button>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="relative z-30 px-6 py-10 border-t bg-gray-950 border-white/10">
-        <div className="flex flex-col items-center justify-between max-w-7xl mx-auto gap-4 text-sm text-gray-500 sm:flex-row">
-          <span className="font-display text-lg font-black text-white">
+      <footer className="relative z-30 px-6 py-10 border-t bg-white border-black/5">
+        <div className="flex flex-col items-center justify-between max-w-7xl mx-auto gap-4 text-sm text-slate-400 sm:flex-row">
+          <span className="font-display text-lg font-black text-[var(--color-headings)]">
             Traviora
           </span>
           <nav className="flex gap-6">
-            <a href="#home" className="hover:text-orange-400">
+            <a href="#home" className="hover:text-[var(--color-primary)]">
               Home
             </a>
-            <a href="#how-it-works" className="hover:text-orange-400">
+            <a
+              href="#how-it-works"
+              className="hover:text-[var(--color-primary)]"
+            >
               How it works
             </a>
-            <a href="#about" className="hover:text-orange-400">
+            <a
+              href="#destinations"
+              className="hover:text-[var(--color-primary)]"
+            >
               Destinations
             </a>
           </nav>

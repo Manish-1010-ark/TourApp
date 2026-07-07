@@ -5,8 +5,9 @@ from dotenv import load_dotenv
 import re
 
 MODEL_MAP = {
-    "flash": "models/gemini-flash-latest",
-    "flash_plus": "models/gemini-2.5-flash"
+    "flash_lite": "models/gemini-2.5-flash-lite",
+    "flash": "models/gemini-2.5-flash",
+    "flash_plus": "models/gemini-3.5-flash"
 }
 
 load_dotenv()
@@ -42,7 +43,8 @@ def generate_itinerary(template: dict, interests: list[str], model_choice: str):
     Raises:
         ValueError: If AI returns invalid or empty response
     """
-    model_name = MODEL_MAP.get(model_choice, MODEL_MAP["flash"])
+    model_name = MODEL_MAP.get(model_choice, MODEL_MAP["flash_lite"])
+    print(f"Using Gemini model: {model_name}")
     model = genai.GenerativeModel(model_name)
 
     prompt = f"""

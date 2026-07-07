@@ -1,17 +1,31 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
+import { useGlobalStyles } from "../hooks/useGlobalStyles";
+import { useCitySearch } from "../hooks/useCitySearch";
+import StepProgress from "../components/trip-preparation/StepProgress";
+import DestinationSearchField from "../components/trip-preparation/DestinationSearchField";
+import JourneyRoute from "../components/trip-preparation/JourneyRoute";
+import DaysSelector from "../components/trip-preparation/DaysSelector";
+import ValidationCard from "../components/trip-preparation/ValidationCard";
+import TravelModeCard from "../components/trip-preparation/TravelModeCard";
+import TripSummary from "../components/trip-preparation/TripSummary";
 
 /**
  * TripPreparation - Merged component for trip setup pipeline
- * 
- * Data Flow:
- * Step 1 (City Selection) → Step 2 (Route Validation) → Step 3 (Travel Mode)
- * 
- * State flow:
- * - selectedCity (lat/lon) → route validation API
- * - validation result (distance_km) → travel mode API
- * - days input → both validation & travel mode APIs
+ *
+ * Data Flow (UNCHANGED):
+ * Step 1 (City Selection) -> Step 2 (Route Validation) -> Step 3 (Travel Mode)
+ *
+ * State flow (UNCHANGED):
+ * - selectedCity (lat/lon) -> route validation API
+ * - validation result (distance_km) -> travel mode API
+ * - days input -> both validation & travel mode APIs
+ *
+ * This file only changes presentation. Every API call, request/response
+ * shape, sessionStorage key, and navigation target is identical to before.
  */
 export default function TripPreparation() {
+  useGlobalStyles();
+
   // ============================================================================
   // STEP 1: CITY SELECTION STATE
   // ============================================================================
@@ -19,17 +33,6 @@ export default function TripPreparation() {
   const [destCity, setDestCity] = useState(null);
   const [sourceCityQuery, setSourceCityQuery] = useState("");
   const [destCityQuery, setDestCityQuery] = useState("");
-  const [sourceSuggestions, setSourceSuggestions] = useState([]);
-  const [destSuggestions, setDestSuggestions] = useState([]);
-  const [isSearchingSource, setIsSearchingSource] = useState(false);
-  const [isSearchingDest, setIsSearchingDest] = useState(false);
-  const [showSourceDropdown, setShowSourceDropdown] = useState(false);
-  const [showDestDropdown, setShowDestDropdown] = useState(false);
-  
-  const sourceDropdownRef = useRef(null);
-  const sourceInputRef = useRef(null);
-  const destDropdownRef = useRef(null);
-  const destInputRef = useRef(null);
 
   // ============================================================================
   // STEP 2: ROUTE VALIDATION STATE
@@ -47,127 +50,31 @@ export default function TripPreparation() {
   const [isLoadingModes, setIsLoadingModes] = useState(false);
   const [modeError, setModeError] = useState(null);
 
-  // Navigation
-  const [shouldNavigate, setShouldNavigate] = useState(false);
-
   const TRAVEL_MODES = {
     flight: { label: "Flight", icon: "✈️" },
     train: { label: "Train", icon: "🚂" },
     bus: { label: "Bus", icon: "🚌" },
-    car: { label: "Car", icon: "🚗" }
+    car: { label: "Car", icon: "🚗" },
   };
 
   // ============================================================================
-  // CITY SEARCH LOGIC (SOURCE)
+  // CITY SEARCH (abstracted — see hooks/useCitySearch.js for the swappable
+  // provider; the endpoint/params/debounce below are identical to before)
   // ============================================================================
-  useEffect(() => {
-    if (sourceCityQuery.length < 2) {
-      setSourceSuggestions([]);
-      setShowSourceDropdown(false);
-      return;
-    }
+  const {
+    suggestions: sourceSuggestions,
+    isSearching: isSearchingSource,
+    error: sourceSearchError,
+  } = useCitySearch(sourceCityQuery, { excludeName: sourceCity?.name });
 
-    if (sourceCity && sourceCityQuery === sourceCity.name) {
-      setShowSourceDropdown(false);
-      return;
-    }
-
-    setIsSearchingSource(true);
-    const timeoutId = setTimeout(async () => {
-      try {
-        const response = await fetch(
-          `http://127.0.0.1:8000/api/locations/search?q=${encodeURIComponent(sourceCityQuery)}`
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          setSourceSuggestions(data);
-          setShowSourceDropdown(data.length > 0);
-        } else {
-          setSourceSuggestions([]);
-          setShowSourceDropdown(false);
-        }
-      } catch (err) {
-        setSourceSuggestions([]);
-        setShowSourceDropdown(false);
-      } finally {
-        setIsSearchingSource(false);
-      }
-    }, 400);
-
-    return () => clearTimeout(timeoutId);
-  }, [sourceCityQuery, sourceCity]);
+  const {
+    suggestions: destSuggestions,
+    isSearching: isSearchingDest,
+    error: destSearchError,
+  } = useCitySearch(destCityQuery, { excludeName: destCity?.name });
 
   // ============================================================================
-  // CITY SEARCH LOGIC (DESTINATION)
-  // ============================================================================
-  useEffect(() => {
-    if (destCityQuery.length < 2) {
-      setDestSuggestions([]);
-      setShowDestDropdown(false);
-      return;
-    }
-
-    if (destCity && destCityQuery === destCity.name) {
-      setShowDestDropdown(false);
-      return;
-    }
-
-    setIsSearchingDest(true);
-    const timeoutId = setTimeout(async () => {
-      try {
-        const response = await fetch(
-          `http://127.0.0.1:8000/api/locations/search?q=${encodeURIComponent(destCityQuery)}`
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          setDestSuggestions(data);
-          setShowDestDropdown(data.length > 0);
-        } else {
-          setDestSuggestions([]);
-          setShowDestDropdown(false);
-        }
-      } catch (err) {
-        setDestSuggestions([]);
-        setShowDestDropdown(false);
-      } finally {
-        setIsSearchingDest(false);
-      }
-    }, 400);
-
-    return () => clearTimeout(timeoutId);
-  }, [destCityQuery, destCity]);
-
-  // ============================================================================
-  // CLICK OUTSIDE HANDLERS
-  // ============================================================================
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        sourceDropdownRef.current && 
-        !sourceDropdownRef.current.contains(event.target) &&
-        sourceInputRef.current &&
-        !sourceInputRef.current.contains(event.target)
-      ) {
-        setShowSourceDropdown(false);
-      }
-      if (
-        destDropdownRef.current && 
-        !destDropdownRef.current.contains(event.target) &&
-        destInputRef.current &&
-        !destInputRef.current.contains(event.target)
-      ) {
-        setShowDestDropdown(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // ============================================================================
-  // STEP 2: ROUTE VALIDATION LOGIC
+  // STEP 2: ROUTE VALIDATION LOGIC (UNCHANGED)
   // ============================================================================
   const handleValidateRoute = async () => {
     if (!sourceCity || !destCity) {
@@ -212,14 +119,14 @@ export default function TripPreparation() {
   };
 
   // ============================================================================
-  // STEP 3: TRAVEL MODE LOGIC
+  // STEP 3: TRAVEL MODE LOGIC (UNCHANGED)
   // ============================================================================
   const fetchTravelModes = async () => {
     if (!validationResult) return;
 
     setIsLoadingModes(true);
     setModeError(null);
-    
+
     try {
       const response = await fetch("http://127.0.0.1:8000/api/travel/modes", {
         method: "POST",
@@ -227,18 +134,17 @@ export default function TripPreparation() {
         body: JSON.stringify({
           distance_km: validationResult.distance_km,
           days: days,
-          preferred_mode: preferredMode
-        })
+          preferred_mode: preferredMode,
+        }),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || `HTTP ${response.status}`);
       }
-      
+
       const data = await response.json();
       setModeData(data);
-      
     } catch (err) {
       setModeError("Failed to fetch travel modes. Ensure backend is running.");
     } finally {
@@ -246,361 +152,238 @@ export default function TripPreparation() {
     }
   };
 
-  // Auto-fetch travel modes when validation succeeds
+  // Auto-fetch travel modes when validation succeeds (UNCHANGED)
   useEffect(() => {
     if (validationResult && validationResult.feasible) {
       fetchTravelModes();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [validationResult, days, preferredMode]);
 
   // ============================================================================
-  // STEP 4: PROCEED TO CONFIGURATION
+  // STEP 4: PROCEED TO CONFIGURATION (UNCHANGED)
   // ============================================================================
   const handleProceedToConfiguration = () => {
-    // Store trip data in sessionStorage for TripConfiguration page
     const tripData = {
       source: sourceCity,
       destination: destCity,
       distance_km: validationResult.distance_km,
       travel_mode: preferredMode,
-      days: days
+      days: days,
     };
-    
-    sessionStorage.setItem('tripData', JSON.stringify(tripData));
-    
-    // Redirect to configuration page
-    window.location.href = '/trip-configuration';
+
+    sessionStorage.setItem("tripData", JSON.stringify(tripData));
+    window.location.href = "/trip-configuration";
   };
 
   // ============================================================================
-  // RENDER
+  // UI-ONLY: which step to highlight in the progress bar
   // ============================================================================
+  let currentStep = 1;
+  if (validationResult) currentStep = 2;
+  if (validationResult?.feasible && modeData) currentStep = 3;
+
+  const handleSwapCities = () => {
+    const prevSource = sourceCity;
+    const prevSourceQuery = sourceCityQuery;
+    setSourceCity(destCity);
+    setSourceCityQuery(destCity ? destCity.name : destCityQuery);
+    setDestCity(prevSource);
+    setDestCityQuery(prevSource ? prevSource.name : prevSourceQuery);
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4">
+    <div className="min-h-screen py-10 px-4" style={{ background: "var(--color-bg)" }}>
       <div className="max-w-6xl mx-auto">
-        
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-800 mb-1">
-            Trip Preparation Pipeline
+        {/* ====================================================================== */}
+        {/* HERO */}
+        {/* ====================================================================== */}
+        <div className="text-center mb-10 animate-fade-in-up">
+          <h1 className="font-display text-4xl md:text-5xl font-bold text-[var(--color-headings)] mb-3">
+            Plan Your Perfect Journey
           </h1>
-          <p className="text-sm text-slate-600">
-            Complete each step sequentially to plan your trip
+          <p className="font-body text-base text-slate-500 max-w-xl mx-auto">
+            Tell us where you're travelling and we'll build an AI-powered itinerary designed just for you.
           </p>
         </div>
 
-        {/* ====================================================================== */}
-        {/* STEP 1: CITY SELECTION */}
-        {/* ====================================================================== */}
-        <div className="bg-white border border-slate-200 rounded p-5 mb-4">
-          <h2 className="text-lg font-semibold text-slate-800 mb-3">
-            Step 1: Select Cities
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            {/* Source City */}
-            <div className="relative">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Source City
-              </label>
-              <input
-                ref={sourceInputRef}
-                type="text"
-                value={sourceCityQuery}
-                onChange={(e) => {
-                  setSourceCityQuery(e.target.value);
-                  if (sourceCity && e.target.value !== sourceCity.name) {
-                    setSourceCity(null);
-                  }
-                }}
-                onFocus={() => {
-                  if (sourceSuggestions.length > 0) {
-                    setShowSourceDropdown(true);
-                  }
-                }}
-                placeholder="Type to search..."
-                className={`w-full px-3 py-2 border rounded text-sm ${
-                  sourceCity ? 'border-green-400 bg-green-50' : 'border-slate-300'
-                }`}
-              />
-              
-              {/* Source Dropdown */}
-              {showSourceDropdown && sourceSuggestions.length > 0 && (
-                <div
-                  ref={sourceDropdownRef}
-                  className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded shadow-lg max-h-48 overflow-y-auto"
-                >
-                  {sourceSuggestions.map((city, index) => (
-                    <button
-                      key={index}
-                      onClick={() => {
-                        setSourceCity(city);
-                        setSourceCityQuery(city.name);
-                        setShowSourceDropdown(false);
-                      }}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 border-b border-slate-100 last:border-b-0"
-                    >
-                      <div className="font-medium text-slate-800">{city.name}</div>
-                      <div className="text-xs text-slate-500">{city.state}</div>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {sourceCity && (
-                <div className="mt-1 text-xs text-green-700">
-                  ✓ {sourceCity.name}, {sourceCity.state}
-                </div>
-              )}
-            </div>
-
-            {/* Destination City */}
-            <div className="relative">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Destination City
-              </label>
-              <input
-                ref={destInputRef}
-                type="text"
-                value={destCityQuery}
-                onChange={(e) => {
-                  setDestCityQuery(e.target.value);
-                  if (destCity && e.target.value !== destCity.name) {
-                    setDestCity(null);
-                  }
-                }}
-                onFocus={() => {
-                  if (destSuggestions.length > 0) {
-                    setShowDestDropdown(true);
-                  }
-                }}
-                placeholder="Type to search..."
-                className={`w-full px-3 py-2 border rounded text-sm ${
-                  destCity ? 'border-green-400 bg-green-50' : 'border-slate-300'
-                }`}
-              />
-              
-              {/* Dest Dropdown */}
-              {showDestDropdown && destSuggestions.length > 0 && (
-                <div
-                  ref={destDropdownRef}
-                  className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded shadow-lg max-h-48 overflow-y-auto"
-                >
-                  {destSuggestions.map((city, index) => (
-                    <button
-                      key={index}
-                      onClick={() => {
-                        setDestCity(city);
-                        setDestCityQuery(city.name);
-                        setShowDestDropdown(false);
-                      }}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 border-b border-slate-100 last:border-b-0"
-                    >
-                      <div className="font-medium text-slate-800">{city.name}</div>
-                      <div className="text-xs text-slate-500">{city.state}</div>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {destCity && (
-                <div className="mt-1 text-xs text-green-700">
-                  ✓ {destCity.name}, {destCity.state}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Days Selector */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Trip Duration: {days} days
-            </label>
-            <input
-              type="range"
-              min="1"
-              max="10"
-              value={days}
-              onChange={(e) => setDays(Number(e.target.value))}
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-slate-500">
-              <span>1 day</span>
-              <span>10 days</span>
-            </div>
-          </div>
-
-          <button
-            onClick={handleValidateRoute}
-            disabled={isValidating || !sourceCity || !destCity}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white text-sm font-medium py-2 px-4 rounded"
-          >
-            {isValidating ? "Validating..." : "Validate Route →"}
-          </button>
-
-          {validationError && (
-            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-              {validationError}
-            </div>
-          )}
+        <div className="mb-10">
+          <StepProgress steps={["Choose Destination", "Validate Route", "Select Travel Mode"]} currentStep={currentStep} />
         </div>
 
-        {/* ====================================================================== */}
-        {/* STEP 2: ROUTE VALIDATION RESULT */}
-        {/* ====================================================================== */}
-        {validationResult && (
-          <div className="bg-white border border-slate-200 rounded p-5 mb-4">
-            <h2 className="text-lg font-semibold text-slate-800 mb-3">
-              Step 2: Route Validation Result
-            </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
+          {/* ====================================================================== */}
+          {/* MAIN COLUMN */}
+          {/* ====================================================================== */}
+          <div className="flex flex-col gap-6">
+            {/* STEP 1: CITY SELECTION */}
+            <div className="card-elevation p-6 md:p-8">
+              <h2 className="font-display text-xl font-bold text-[var(--color-headings)] mb-5">Where are you headed?</h2>
 
-            <div className={`p-4 rounded ${
-              validationResult.feasible 
-                ? 'bg-green-50 border border-green-200' 
-                : 'bg-orange-50 border border-orange-200'
-            }`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-slate-800">
-                  {validationResult.feasible ? "✅ Route Feasible" : "⚠️ Route Not Recommended"}
-                </span>
-                <span className="text-sm font-medium text-slate-700">
-                  {validationResult.distance_km} km
-                </span>
+              <JourneyRoute source={sourceCity} destination={destCity} onSwap={handleSwapCities}>
+                {[
+                  <DestinationSearchField
+                    key="source"
+                    inputId="source-city"
+                    label="From"
+                    placeholder="Departure city..."
+                    query={sourceCityQuery}
+                    onQueryChange={(val) => {
+                      setSourceCityQuery(val);
+                      if (sourceCity && val !== sourceCity.name) setSourceCity(null);
+                    }}
+                    selected={sourceCity}
+                    onSelect={(city) => {
+                      setSourceCity(city);
+                      setSourceCityQuery(city.name);
+                    }}
+                    onClear={() => {
+                      setSourceCity(null);
+                      setSourceCityQuery("");
+                    }}
+                    suggestions={sourceSuggestions}
+                    isSearching={isSearchingSource}
+                    searchError={sourceSearchError}
+                  />,
+                  <DestinationSearchField
+                    key="dest"
+                    inputId="dest-city"
+                    label="To"
+                    placeholder="Destination city..."
+                    query={destCityQuery}
+                    onQueryChange={(val) => {
+                      setDestCityQuery(val);
+                      if (destCity && val !== destCity.name) setDestCity(null);
+                    }}
+                    selected={destCity}
+                    onSelect={(city) => {
+                      setDestCity(city);
+                      setDestCityQuery(city.name);
+                    }}
+                    onClear={() => {
+                      setDestCity(null);
+                      setDestCityQuery("");
+                    }}
+                    suggestions={destSuggestions}
+                    isSearching={isSearchingDest}
+                    searchError={destSearchError}
+                  />,
+                ]}
+              </JourneyRoute>
+
+              <div className="mt-6 pt-6 border-t border-slate-100">
+                <DaysSelector days={days} onChange={setDays} />
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-2">
-                <div className="text-sm">
-                  <div className="text-slate-600">Your Plan:</div>
-                  <div className="font-semibold text-slate-800">{days} days</div>
-                </div>
-                <div className="text-sm">
-                  <div className="text-slate-600">Recommended:</div>
-                  <div className="font-semibold text-slate-800">{validationResult.minimum_days} days</div>
-                </div>
-              </div>
+              <button
+                onClick={handleValidateRoute}
+                disabled={isValidating || !sourceCity || !destCity}
+                className="btn-primary w-full mt-6 flex items-center justify-center gap-2"
+              >
+                {isValidating ? (
+                  <>
+                    <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,0.4)" strokeWidth="3" />
+                      <path d="M21 12a9 9 0 00-9-9" stroke="white" strokeWidth="3" strokeLinecap="round" />
+                    </svg>
+                    Checking route...
+                  </>
+                ) : (
+                  "Validate Route →"
+                )}
+              </button>
 
-              {validationResult.reason && (
-                <div className="text-sm text-orange-700 mt-2">
-                  💡 {validationResult.reason}
-                </div>
-              )}
-
-              {validationResult.feasible && (
-                <div className="text-sm text-green-700 mt-2">
-                  ✓ Proceed to travel mode selection
+              {validationError && (
+                <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-2xl text-sm font-body text-orange-800 animate-fade-in-up">
+                  {validationError}
                 </div>
               )}
             </div>
-          </div>
-        )}
 
-        {/* ====================================================================== */}
-        {/* STEP 3: TRAVEL MODE SELECTION */}
-        {/* ====================================================================== */}
-        {validationResult && validationResult.feasible && (
-          <div className="bg-white border border-slate-200 rounded p-5 mb-4">
-            <h2 className="text-lg font-semibold text-slate-800 mb-3">
-              Step 3: Select Travel Mode
-            </h2>
+            {/* STEP 2: ROUTE VALIDATION RESULT */}
+            {validationResult && <ValidationCard validationResult={validationResult} days={days} />}
 
-            {isLoadingModes && (
-              <div className="text-sm text-slate-600 py-4">Loading travel modes...</div>
-            )}
+            {/* STEP 3: TRAVEL MODE SELECTION */}
+            {validationResult && validationResult.feasible && (
+              <div className="card-elevation p-6 md:p-8 animate-fade-in-up">
+                <h2 className="font-display text-xl font-bold text-[var(--color-headings)] mb-1">Choose your travel mode</h2>
+                <p className="text-sm font-body text-slate-500 mb-5">
+                  Best options for a {validationResult.distance_km} km journey
+                </p>
 
-            {modeError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 mb-3">
-                {modeError}
+                {isLoadingModes && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-2">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div key={i} className="skeleton-shimmer h-28 rounded-2xl" />
+                    ))}
+                  </div>
+                )}
+
+                {modeError && (
+                  <div className="p-4 bg-orange-50 border border-orange-200 rounded-2xl text-sm font-body text-orange-800 mb-4">
+                    {modeError}
+                  </div>
+                )}
+
+                {modeData && !isLoadingModes && (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                      {Object.entries(TRAVEL_MODES).map(([modeKey, modeInfo]) => (
+                        <TravelModeCard
+                          key={modeKey}
+                          modeKey={modeKey}
+                          label={modeInfo.label}
+                          isRecommended={modeData.recommended_modes.includes(modeKey)}
+                          isSelected={preferredMode === modeKey}
+                          estimatedTime={modeData.estimated_times[modeKey]}
+                          onSelect={() => setPreferredMode(preferredMode === modeKey ? null : modeKey)}
+                        />
+                      ))}
+                    </div>
+
+                    {preferredMode && !modeData.preferred_mode_valid && (
+                      <div className="p-4 bg-orange-50 border border-orange-200 rounded-2xl text-sm font-body text-orange-800 animate-fade-in-up">
+                        ⚠️ {modeData.preferred_mode_reason}
+                      </div>
+                    )}
+
+                    {preferredMode && modeData.preferred_mode_valid && (
+                      <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-sm font-body text-emerald-800 animate-fade-in-up">
+                        {TRAVEL_MODES[preferredMode].label} is suitable — estimated time:{" "}
+                        {modeData.estimated_times[preferredMode]}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
-            {modeData && (
-              <>
-                {/* Recommended Modes */}
-                <div className="mb-4">
-                  <div className="text-sm text-slate-600 mb-2">
-                    Recommended modes for {validationResult.distance_km} km:
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {modeData.recommended_modes.map((mode) => (
-                      <span
-                        key={mode}
-                        className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full font-medium"
-                      >
-                        {TRAVEL_MODES[mode].icon} {TRAVEL_MODES[mode].label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+            {/* STEP 4: PROCEED TO CONFIGURATION */}
+            {validationResult && validationResult.feasible && modeData && (
+              <div className="card-elevation p-6 md:p-8 animate-fade-in-up">
+                <h2 className="font-display text-xl font-bold text-[var(--color-headings)] mb-2">Ready for the next step</h2>
+                <p className="text-sm font-body text-slate-500 mb-5">
+                  Your route is validated. Continue to configure your trip preferences and generate the itinerary.
+                </p>
 
-                {/* Mode Selection Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                  {Object.entries(TRAVEL_MODES).map(([modeKey, modeInfo]) => {
-                    const isRec = modeData.recommended_modes.includes(modeKey);
-                    const isSelected = preferredMode === modeKey;
-                    
-                    return (
-                      <button
-                        key={modeKey}
-                        onClick={() => setPreferredMode(isSelected ? null : modeKey)}
-                        className={`p-3 border rounded text-center text-sm ${
-                          isSelected
-                            ? 'border-blue-500 bg-blue-50'
-                            : isRec
-                            ? 'border-green-300 bg-white hover:bg-slate-50'
-                            : 'border-slate-200 bg-slate-50 opacity-75'
-                        }`}
-                      >
-                        <div className="text-2xl mb-1">{modeInfo.icon}</div>
-                        <div className="font-medium text-slate-800">{modeInfo.label}</div>
-                        <div className="text-xs text-slate-600 mt-1">
-                          {modeData.estimated_times[modeKey]}
-                        </div>
-                        {isRec && (
-                          <div className="text-xs text-green-700 mt-1">✓ Recommended</div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Mode Validation Message */}
-                {preferredMode && !modeData.preferred_mode_valid && (
-                  <div className="p-3 bg-orange-50 border border-orange-200 rounded text-sm text-orange-800">
-                    ⚠️ {modeData.preferred_mode_reason}
-                  </div>
-                )}
-
-                {preferredMode && modeData.preferred_mode_valid && (
-                  <div className="p-3 bg-green-50 border border-green-200 rounded text-sm text-green-800">
-                    ✅ {TRAVEL_MODES[preferredMode].label} is suitable. Estimated time: {modeData.estimated_times[preferredMode]}
-                  </div>
-                )}
-              </>
+                <button onClick={handleProceedToConfiguration} className="btn-primary w-full">
+                  Continue to Trip Configuration →
+                </button>
+              </div>
             )}
           </div>
-        )}
 
-        {/* ====================================================================== */}
-        {/* STEP 4: PROCEED TO CONFIGURATION */}
-        {/* ====================================================================== */}
-        {validationResult && validationResult.feasible && modeData && (
-          <div className="bg-white border border-slate-200 rounded p-5 mb-4">
-            <h2 className="text-lg font-semibold text-slate-800 mb-3">
-              Step 4: Proceed to Configuration
-            </h2>
-
-            <p className="text-sm text-slate-600 mb-4">
-              Your route is validated and travel mode is selected. Continue to configure your trip preferences and generate the itinerary.
-            </p>
-
-            <button
-              onClick={handleProceedToConfiguration}
-              className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-3 px-4 rounded"
-            >
-              Continue to Trip Configuration →
-            </button>
-          </div>
-        )}
+          {/* ====================================================================== */}
+          {/* SIDEBAR: LIVE SUMMARY */}
+          {/* ====================================================================== */}
+          <TripSummary
+            sourceCity={sourceCity}
+            destCity={destCity}
+            days={days}
+            validationResult={validationResult}
+            preferredMode={preferredMode}
+          />
+        </div>
       </div>
     </div>
   );
