@@ -66,7 +66,7 @@ export default function TripConfiguration() {
     vegetarian_friendly: false,
     photography_focus: false,
   });
-  const [aiModel, setAiModel] = useState("gemini-flash-latest");
+  const [aiModel, setAiModel] = useState("standard");
 
   // UI state
   const [loadingInterests, setLoadingInterests] = useState(false);

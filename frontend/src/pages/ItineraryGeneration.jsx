@@ -89,7 +89,13 @@ export default function ItineraryGeneration() {
     setItinerary(null);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    // Was 45000ms — too aggressive. Server logs confirmed a real Pro-tier,
+    // 5-day/19-place generation took 53s end-to-end and succeeded, but the
+    // old 45s abort fired first, discarding a good response, showing a
+    // false "taking too long" error, AND still burning one of the limited
+    // Pro-tier uses server-side for nothing. Bumped to 150s to comfortably
+    // cover Pro-tier and longer/multi-day itineraries with real headroom.
+    const timeoutId = setTimeout(() => controller.abort(), 150000);
 
     console.log(
       "[ItineraryGeneration] POST /api/itinerary — request body:",
@@ -202,10 +208,18 @@ export default function ItineraryGeneration() {
   const handleSelectDay = (dayNum) => {
     setExpandedDay(dayNum);
     setActiveDayInView(dayNum);
-    dayRefs.current[dayNum]?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    // DayCard animates collapse/expand over 300ms (duration-300 grid-rows
+    // transition), and only the expanded day's blocks are even mounted.
+    // Scrolling in the same tick measures a layout that's still shifting
+    // (previous day collapsing, target day expanding) and lands wherever
+    // things happen to settle a moment later — the "jumps to wrong place"
+    // bug. Deferring past the transition lets layout finish first.
+    setTimeout(() => {
+      dayRefs.current[dayNum]?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 320);
   };
 
   // ============================================================================
@@ -220,12 +234,23 @@ export default function ItineraryGeneration() {
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
     .join(" · ");
 
-  const placesCovered = itinerary
-    ? itinerary.itinerary.reduce(
-        (sum, day) => sum + (day.blocks?.length ?? 0),
-        0,
-      )
-    : undefined;
+  // trip_stats is a new, authoritative block the backend now sends
+  // (distance_km, places_covered, estimated_budget_display). Prefer it
+  // wherever present; the older client-side derivations remain only as a
+  // fallback for responses that don't include it yet.
+  const tripStats = itinerary ? getField(itinerary, "trip_stats") : undefined;
+
+  const placesCovered =
+    getField(tripStats, "places_covered") ??
+    (itinerary
+      ? itinerary.itinerary.reduce(
+          (sum, day) => sum + (day.blocks?.length ?? 0),
+          0,
+        )
+      : undefined);
+
+  const distanceKm =
+    getField(tripStats, "distance_km") ?? getField(tripSummary, "distance_km");
 
   const numericBudget = itinerary
     ? getField(itinerary, "estimated_budget", "total_budget")
@@ -234,6 +259,7 @@ export default function ItineraryGeneration() {
     ? getField(itinerary, "budget_breakdown", "cost_breakdown")
     : undefined;
   const budgetDisplay =
+    getField(tripStats, "estimated_budget_display") ??
     numericBudget ??
     (budgetBreakdown
       ? getField(budgetBreakdown, "total", "estimated_total")
@@ -323,97 +349,108 @@ export default function ItineraryGeneration() {
       {/* ITINERARY */}
       {/* ================================================================== */}
       {itinerary && !loading && (
-        <div className="max-w-7xl mx-auto px-4 pb-16">
-          <div className="pt-6">
-            <HeroBanner
-              destination={itinerary.destination}
-              days={itinerary.days}
-              source={tripSummary?.source}
-              travelMode={tripSummary?.travel_mode}
-              budgetLabel={
-                budgetTier
-                  ? `${budgetTier.charAt(0).toUpperCase()}${budgetTier.slice(1)} Budget`
-                  : undefined
-              }
-              styleLabel={styleLabel || undefined}
-              groupType={getField(configuration, "group_type")}
-            />
-
-            <TripStats
-              days={itinerary.days}
-              placesCovered={placesCovered}
-              budgetDisplay={budgetDisplay}
-              distanceKm={getField(tripSummary, "distance_km")}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_300px] gap-6 items-start">
-            {/* LEFT SIDEBAR (stacks above the timeline on mobile — grid-cols-1
-                already handles that; only "hidden" was wrongly removing it) */}
-            <div className="flex flex-col gap-5">
-              <DayNavigator
-                days={itinerary.itinerary}
-                activeDay={activeDayInView}
-                onSelectDay={handleSelectDay}
+        <>
+          {/* Fixed to the viewport's left edge, independent of the grid/
+              scroll below — this is why it's rendered outside the grid
+              rather than inside the left sidebar column. */}
+          <DayNavigator
+            days={itinerary.itinerary}
+            activeDay={activeDayInView}
+            onSelectDay={handleSelectDay}
+          />
+          <div className="max-w-7xl mx-auto px-4 pb-16">
+            <div className="pt-6">
+              <HeroBanner
+                destination={itinerary.destination}
+                days={itinerary.days}
+                source={tripSummary?.source}
+                travelMode={tripSummary?.travel_mode}
+                budgetLabel={
+                  budgetTier
+                    ? `${budgetTier.charAt(0).toUpperCase()}${budgetTier.slice(1)} Budget`
+                    : undefined
+                }
+                styleLabel={styleLabel || undefined}
+                groupType={getField(configuration, "group_type")}
               />
-              <BudgetSummaryCard
-                budgetTier={budgetTier}
-                breakdown={budgetBreakdown}
-              />
-              <WeatherCard
-                weather={getField(itinerary, "weather", "weather_snapshot")}
+
+              <TripStats
+                days={itinerary.days}
+                placesCovered={placesCovered}
+                budgetDisplay={budgetDisplay}
+                distanceKm={distanceKm}
               />
             </div>
 
-            {/* MAIN TIMELINE */}
-            <div className="flex flex-col gap-5">
-              {itinerary.itinerary.map((day) => (
-                <DayCard
-                  key={day.day}
-                  day={day}
-                  isExpanded={expandedDay === day.day}
-                  onToggle={() =>
-                    setExpandedDay(expandedDay === day.day ? null : day.day)
-                  }
-                  registerRef={registerDayRef(day.day)}
+            <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_300px] gap-6 items-start">
+              {/* LEFT SIDEBAR (stacks above the timeline on mobile — grid-cols-1
+                already handles that; only "hidden" was wrongly removing it).
+                min-w-0 lets this column actually shrink to 220px instead of
+                growing to fit its widest child and pushing the grid wider
+                than the page. */}
+              <div className="flex flex-col gap-5 min-w-0">
+                <BudgetSummaryCard
+                  budgetTier={budgetTier}
+                  breakdown={budgetBreakdown}
                 />
-              ))}
+                <WeatherCard
+                  weather={getField(itinerary, "weather", "weather_snapshot")}
+                />
+              </div>
+
+              {/* MAIN TIMELINE — min-w-0 for the same reason: without it, a
+                grid column's default min-width is the intrinsic content
+                width, not the 1fr share, which is the actual cause of
+                content getting pushed off-page at narrower viewports. */}
+              <div className="flex flex-col gap-5 min-w-0">
+                {itinerary.itinerary.map((day) => (
+                  <DayCard
+                    key={day.day}
+                    day={day}
+                    isExpanded={expandedDay === day.day}
+                    onToggle={() =>
+                      setExpandedDay(expandedDay === day.day ? null : day.day)
+                    }
+                    registerRef={registerDayRef(day.day)}
+                  />
+                ))}
+              </div>
+
+              {/* RIGHT SIDEBAR */}
+              <div className="flex flex-col gap-5 min-w-0">
+                <MustVisitSection source={itinerary} />
+                <FoodSection source={itinerary} />
+                <TravelTips source={itinerary} />
+                <EssentialInfo source={itinerary} />
+              </div>
             </div>
 
-            {/* RIGHT SIDEBAR */}
-            <div className="flex flex-col gap-5">
-              <MustVisitSection source={itinerary} />
-              <FoodSection source={itinerary} />
-              <TravelTips source={itinerary} />
-              <EssentialInfo source={itinerary} />
+            {/* ADDITIONAL INFORMATION — fully dynamic */}
+            <AdditionalInfoSection itinerary={itinerary} />
+
+            {/* ACTION FOOTER */}
+            <div className="card-elevation p-6 sm:p-8 text-center mt-10">
+              <p className="text-sm font-body text-slate-500 mb-4">
+                Your itinerary is ready. Generate another version or head back
+                to adjust your preferences.
+              </p>
+              <div className="flex flex-wrap gap-3 justify-center">
+                <button
+                  onClick={handleGenerateItinerary}
+                  className="btn-primary px-6"
+                >
+                  🔄 Generate Another
+                </button>
+                <button
+                  onClick={() => (window.location.href = "/trip-configuration")}
+                  className="px-6 py-2.5 rounded-2xl text-sm font-semibold font-body text-slate-600 border-2 border-slate-200 hover:border-slate-300 transition-colors"
+                >
+                  ← Back to Configuration
+                </button>
+              </div>
             </div>
           </div>
-
-          {/* ADDITIONAL INFORMATION — fully dynamic */}
-          <AdditionalInfoSection itinerary={itinerary} />
-
-          {/* ACTION FOOTER */}
-          <div className="card-elevation p-6 sm:p-8 text-center mt-10">
-            <p className="text-sm font-body text-slate-500 mb-4">
-              Your itinerary is ready. Generate another version or head back to
-              adjust your preferences.
-            </p>
-            <div className="flex flex-wrap gap-3 justify-center">
-              <button
-                onClick={handleGenerateItinerary}
-                className="btn-primary px-6"
-              >
-                🔄 Generate Another
-              </button>
-              <button
-                onClick={() => (window.location.href = "/trip-configuration")}
-                className="px-6 py-2.5 rounded-2xl text-sm font-semibold font-body text-slate-600 border-2 border-slate-200 hover:border-slate-300 transition-colors"
-              >
-                ← Back to Configuration
-              </button>
-            </div>
-          </div>
-        </div>
+        </>
       )}
     </div>
   );

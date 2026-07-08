@@ -41,9 +41,22 @@ class BudgetTier(str, Enum):
     LUXURY = "luxury"
 
 class AIModel(str, Enum):
-    """AI model options for itinerary generation"""
+    """AI model options for itinerary generation.
+
+    Two user-facing tiers — STANDARD/PRO — matching AIModelSelector.jsx and
+    itinerary_route.py's MODEL_MAP. Older values are kept here too for
+    backward compatibility (MODEL_MAP still resolves them), but new clients
+    should send "standard" or "pro"."""
+    STANDARD = "standard"
+    PRO = "pro"
+
+    # Backward compatibility with previously used ai_model values
     GEMINI_FLASH = "gemini-flash-latest"
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
+    GEMINI_2_5_PRO = "gemini-2.5-pro"
+    FLASH = "flash"
+    FLASH_PLUS = "flash_plus"
+    FLASH_LITE = "flash_lite"
 
 FALLBACK_INTERESTS = [
     "local food",
@@ -86,7 +99,7 @@ class TripConfigRequest(BaseModel):
     selected_interests: Optional[List[str]] = Field(None, description="User-selected interests")
     optional_constraints: OptionalConstraints = Field(default_factory=OptionalConstraints)
     
-    ai_model: AIModel = Field(AIModel.GEMINI_FLASH, description="AI model for generation")
+    ai_model: AIModel = Field(AIModel.STANDARD, description="AI model for generation")
 
 class TripSummary(BaseModel):
     """Read-only trip summary"""
@@ -474,7 +487,8 @@ async def trip_config_health():
         "ai_usage": "Only for interest suggestion",
         "pace_options": [p.value for p in TravelPace],
         "budget_options": [b.value for b in BudgetTier],
-        "ai_models": [m.value for m in AIModel]
+        "ai_models": [m.value for m in AIModel],
+        "ai_model_tiers": ["standard", "pro"]
     }
 
 # ============================================================================

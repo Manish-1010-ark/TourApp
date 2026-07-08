@@ -48,6 +48,11 @@ export function formatCurrency(value) {
 // aliases to check for and a `kind` describing how to render the value.
 // Anything the backend sends that ISN'T in this list still gets rendered
 // generically (see AdditionalInfoSection's fallback) rather than dropped.
+//
+// NOTE: "budget_breakdown" intentionally is NOT listed here — it has a
+// dedicated BudgetSummaryCard consumer already; including it here caused
+// it to render a SECOND time under "Good to Know". It's excluded via
+// HANDLED_ELSEWHERE in AdditionalInfoSection.jsx instead.
 export const KNOWN_SECTIONS = [
   {
     id: "packing_list",
@@ -62,13 +67,6 @@ export const KNOWN_SECTIONS = [
     title: "Safety Tips",
     icon: "🛡️",
     kind: "list",
-  },
-  {
-    id: "budget_breakdown",
-    keys: ["budget_breakdown", "cost_breakdown"],
-    title: "Budget Breakdown",
-    icon: "💰",
-    kind: "keyvalue",
   },
   {
     id: "shopping_suggestions",
@@ -125,6 +123,13 @@ export const KNOWN_SECTIONS = [
     title: "Hotel Recommendations",
     icon: "🏨",
     kind: "cards",
+  },
+  {
+    id: "restaurant_recommendations",
+    keys: ["restaurant_recommendations", "restaurants"],
+    title: "Restaurant Recommendations",
+    icon: "🍽️",
+    kind: "restaurant_cards",
   },
   {
     id: "nearby_attractions",

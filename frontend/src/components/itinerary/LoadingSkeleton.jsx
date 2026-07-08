@@ -11,12 +11,23 @@ const LOADING_MESSAGES = [
 
 export default function LoadingSkeleton({ destination }) {
   const [messageIndex, setMessageIndex] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageIndex((i) => (i + 1) % LOADING_MESSAGES.length);
     }, 2200);
     return () => clearInterval(interval);
+  }, []);
+
+  // Real generations (esp. Pro tier / multi-day trips) have measured up to
+  // ~53s in production. Past 20s, surface an explicit reassurance so a long
+  // wait reads as "still working" rather than "stuck" — the goal is to
+  // avoid the person manually bailing out and retrying, which wastes a
+  // limited Pro-tier use on a request that may well have already succeeded.
+  useEffect(() => {
+    const tick = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(tick);
   }, []);
 
   return (
@@ -48,6 +59,12 @@ export default function LoadingSkeleton({ destination }) {
         >
           {LOADING_MESSAGES[messageIndex]}
         </p>
+        {elapsed >= 20 && (
+          <p className="font-body text-xs text-slate-400 mt-3">
+            Still working — richer itineraries can take a little over a minute.
+            No need to retry, this is normal.
+          </p>
+        )}
       </div>
 
       {/* Skeleton hero */}

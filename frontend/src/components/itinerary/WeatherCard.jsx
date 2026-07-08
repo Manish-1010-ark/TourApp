@@ -24,6 +24,14 @@ export default function WeatherCard({ weather }) {
             <div className="text-xs font-body text-slate-500">
               {weather.summary ?? weather.condition}
             </div>
+            {weather.best_time_to_visit && (
+              <div className="text-xs font-body text-slate-400 mt-1">
+                Best time to visit:{" "}
+                <span className="font-semibold text-slate-500">
+                  {weather.best_time_to_visit}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       ) : (

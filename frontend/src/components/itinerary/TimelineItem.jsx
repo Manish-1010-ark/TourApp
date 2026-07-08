@@ -57,7 +57,12 @@ export default function TimelineItem({ block = {}, isLast }) {
       : null;
   const location = getField(block, "location", "place");
   const duration = getField(block, "estimated_duration", "duration");
-  const cost = getField(block, "estimated_cost", "cost");
+  const rawCost = getField(block, "estimated_cost", "cost");
+  // Backend occasionally sends the string literal "null" instead of JSON
+  // null (see day 3's "Leisure & Check-out" block) — treat it as absent,
+  // same as photography_note already does for the literal "None."
+  const cost =
+    rawCost && String(rawCost).trim().toLowerCase() !== "null" ? rawCost : null;
   const tip = getField(block, "important_tip", "tip");
   const optionalLabel = getField(block, "optional_label", "label");
   const style =
