@@ -26,6 +26,8 @@ from routes.trip_config import router as trip_config_router  # Module 5
 # If your project's file is really named routes/itinerary.py instead,
 # change this one line back.
 from routes.itinerary_route import router as itinerary_router  # Module 6
+from routes.chatbot import router as chatbot_router            # Module 7: AI Travel Chatbot
+from routes.destination import router as destination_router    # Module 8: Destination discovery
 
 from services.usage_tracker import reset_pro_usage, get_pro_usage_stats
 
@@ -39,6 +41,8 @@ app.include_router(route_router)         # Module 2: Route feasibility
 app.include_router(travel_router)        # Module 3: Travel modes
 app.include_router(trip_config_router)   # Module 5: Trip configuration
 app.include_router(itinerary_router)     # Module 6: Itinerary generation
+app.include_router(chatbot_router)       # Module 7: AI Travel Chatbot (floating widget)
+app.include_router(destination_router)   # Module 8: Destination discovery
 
 # ============================================================================
 # CORS MIDDLEWARE
@@ -61,9 +65,8 @@ app.add_middleware(
 # ============================================================================
 # ADMIN ENDPOINTS
 # ============================================================================
-# Now backed by services/usage_tracker.py (shared with routes/itinerary_route.py)
-# instead of a local dict duplicated in this file, and keyed on "pro"
-# instead of the old "flash_plus".
+# Backed by services/usage_tracker.py (shared with routes/itinerary_route.py),
+# keyed on "pro" instead of the old "flash_plus" counter.
 
 @app.post("/api/admin/reset-counter")
 def reset_premium_counter():
@@ -93,5 +96,7 @@ def read_root():
             "trip_configuration": "/api/trip/configure",
             "interest_suggestion": "/api/interests/suggest",
             "itinerary_generation": "/api/itinerary",
+            "chatbot": "/api/chat",
+            "destination_discovery": "/destination/info",
         },
     }

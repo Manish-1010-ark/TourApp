@@ -14,6 +14,7 @@ import EssentialInfo from "../components/itinerary/EssentialInfo";
 import AdditionalInfoSection from "../components/itinerary/AdditionalInfoSection";
 import LoadingSkeleton from "../components/itinerary/LoadingSkeleton";
 import ErrorState from "../components/itinerary/ErrorState.jsx";
+import DestinationModal from "../components/itinerary/DestinationModal";
 import { getField, isEmptyValue } from "../components/itinerary/utils.js";
 
 /**
@@ -49,6 +50,7 @@ export default function ItineraryGeneration() {
 
   const [expandedDay, setExpandedDay] = useState(1);
   const [activeDayInView, setActiveDayInView] = useState(1);
+  const [showDestinationModal, setShowDestinationModal] = useState(false);
   const dayRefs = useRef({});
 
   // ============================================================================
@@ -258,6 +260,28 @@ export default function ItineraryGeneration() {
   const budgetBreakdown = itinerary
     ? getField(itinerary, "budget_breakdown", "cost_breakdown")
     : undefined;
+  // Best-effort destination detail bundle for the DestinationModal — the
+  // backend field names vary a bit by response version, so fall back
+  // across the likely aliases rather than assuming one shape.
+  const destinationDetails = itinerary
+    ? {
+        name: itinerary.destination,
+        description: getField(
+          itinerary,
+          "destination_description",
+          "destination_overview",
+          "overview",
+        ),
+        coordinates: getField(
+          itinerary,
+          "coordinates",
+          "destination_coordinates",
+        ),
+        photos: getField(itinerary, "photos", "destination_photos") ?? [],
+        mapillary_url: getField(itinerary, "mapillary_url"),
+      }
+    : null;
+
   const budgetDisplay =
     getField(tripStats, "estimated_budget_display") ??
     numericBudget ??
@@ -396,6 +420,25 @@ export default function ItineraryGeneration() {
                 <WeatherCard
                   weather={getField(itinerary, "weather", "weather_snapshot")}
                 />
+
+                {/* Opens DestinationModal with photos, description, coordinates,
+                    and quick links (360° view / Google Maps) for the trip's
+                    destination. */}
+                <div className="card-elevation p-5 text-center">
+                  <div className="text-3xl mb-2">📍</div>
+                  <h3 className="font-display text-base font-bold text-[var(--color-headings)] mb-1">
+                    Explore {itinerary.destination}
+                  </h3>
+                  <p className="text-sm font-body text-slate-500 mb-4">
+                    Photos, coordinates, and a 360° street view.
+                  </p>
+                  <button
+                    onClick={() => setShowDestinationModal(true)}
+                    className="btn-primary w-full"
+                  >
+                    View Destination Details
+                  </button>
+                </div>
               </div>
 
               {/* MAIN TIMELINE — min-w-0 for the same reason: without it, a
@@ -450,6 +493,13 @@ export default function ItineraryGeneration() {
               </div>
             </div>
           </div>
+
+          {showDestinationModal && (
+            <DestinationModal
+              destination={destinationDetails}
+              onClose={() => setShowDestinationModal(false)}
+            />
+          )}
         </>
       )}
     </div>

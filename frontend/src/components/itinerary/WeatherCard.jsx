@@ -1,6 +1,52 @@
 // components/itinerary/WeatherCard.jsx
 
 /**
+ * The backend sends icon *identifiers* (Material-Symbols-style strings like
+ * "partly_sunny", "clear-day", "thunderstorm"), not emoji. Rendering that
+ * identifier directly as text (at text-3xl!) was the bug behind the layout
+ * blowing up — a 12-character string at 3xl size forced the icon flex item
+ * wide, squeezing the description into a sliver and wrapping it one word
+ * per line. This map translates known identifiers to real emoji, with a
+ * safe fallback for anything unrecognized so a new/unexpected backend value
+ * can never do that again.
+ */
+const WEATHER_ICON_MAP = {
+  sunny: "☀️",
+  clear: "☀️",
+  "clear-day": "☀️",
+  "clear-night": "🌙",
+  partly_sunny: "🌤️",
+  partly_cloudy: "⛅",
+  "partly-cloudy-day": "🌤️",
+  "partly-cloudy-night": "☁️",
+  cloudy: "☁️",
+  overcast: "☁️",
+  rain: "🌧️",
+  showers: "🌦️",
+  drizzle: "🌦️",
+  thunderstorm: "⛈️",
+  snow: "❄️",
+  sleet: "🌨️",
+  fog: "🌫️",
+  mist: "🌫️",
+  haze: "🌫️",
+  windy: "💨",
+};
+
+const DEFAULT_WEATHER_ICON = "🌤️";
+
+function resolveWeatherIcon(icon) {
+  if (!icon) return DEFAULT_WEATHER_ICON;
+
+  // Already a short glyph/emoji (emoji are typically 1-4 UTF-16 code units) —
+  // render as-is rather than trying to look it up.
+  if (icon.length <= 4) return icon;
+
+  const key = String(icon).trim().toLowerCase().replace(/\s+/g, "_");
+  return WEATHER_ICON_MAP[key] ?? DEFAULT_WEATHER_ICON;
+}
+
+/**
  * WeatherCard — the backend doesn't provide weather data today, so this
  * renders a clearly-labelled placeholder illustration rather than
  * fabricating a forecast. Swaps to real data automatically the moment
@@ -14,9 +60,13 @@ export default function WeatherCard({ weather }) {
       </div>
 
       {weather ? (
-        <div className="flex items-center gap-3">
-          <div className="text-3xl">{weather.icon ?? "🌤️"}</div>
-          <div>
+        <div className="flex items-start gap-3">
+          {/* shrink-0 is load-bearing: without it, an unexpectedly long
+              icon value can still steal width from the text column below. */}
+          <div className="text-3xl shrink-0">
+            {resolveWeatherIcon(weather.icon)}
+          </div>
+          <div className="min-w-0 flex-1">
             <div className="font-display font-bold text-lg text-[var(--color-headings)]">
               {weather.temp_min ?? weather.min}° –{" "}
               {weather.temp_max ?? weather.max}°C
