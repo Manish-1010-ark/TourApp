@@ -1,0 +1,89 @@
+from services.mapillary_service import geocode_place, get_nearest_image_with_url
+from services.streetview_service import check_streetview_availability
+
+
+def get_panorama_source(place_name: str, search_query: str = None):
+    """
+    Resolves a place name to a 360-viewer-ready payload, checking sources
+    in priority order:
+
+        1. Google Street View (best coverage on major landmarks)
+        2. Mapillary spherical/pano image (crowdsourced, free, decent
+           urban coverage)
+        3. Mapillary flat photo (no true 360, but still something to show)
+        4. No coverage at all
+
+    Returns a dict matching the `place` prop shape VRViewer.jsx expects:
+        { source, placeName, lat, lng, imageUrl }
+
+    `source` is always one of: "streetview" | "mapillary" | "photo_fallback"
+    """
+
+    query = search_query or place_name
+
+    location = geocode_place(query)
+
+    if location is None:
+        return {
+            "source": "photo_fallback",
+            "placeName": place_name,
+            "lat": None,
+            "lng": None,
+            "imageUrl": None,
+        }
+
+    lat = location["latitude"]
+    lng = location["longitude"]
+
+    # --- Tier 1: Street View ---------------------------------------
+    # (Currently a safe no-op: check_streetview_availability returns None
+    # immediately if GOOGLE_MAPS_API_KEY isn't set, so this never blocks
+    # the flow below or costs anything.)
+    try:
+        streetview = check_streetview_availability(lat, lng)
+    except Exception as e:
+        print("Street View check failed, skipping:", e)
+        streetview = None
+
+    if streetview is not None:
+        return {
+            "source": "streetview",
+            "placeName": place_name,
+            "lat": streetview["latitude"],
+            "lng": streetview["longitude"],
+            "imageUrl": None,
+        }
+
+    # --- Tier 2 / 3: Mapillary ---------------------------------------
+    try:
+        mapillary_image = get_nearest_image_with_url(lat, lng)
+    except Exception as e:
+        print("Mapillary lookup failed, falling back:", e)
+        mapillary_image = None
+
+    if mapillary_image is not None:
+        return {
+            "source": "mapillary" if mapillary_image["is_pano"] else "photo_fallback",
+            "placeName": place_name,
+            "lat": lat,
+            "lng": lng,
+            "imageUrl": mapillary_image["image_url"],
+        }
+
+    # --- Tier 4: nothing found ---------------------------------------
+    return {
+        "source": "photo_fallback",
+        "placeName": place_name,
+        "lat": lat,
+        "lng": lng,
+        "imageUrl": None,
+    }
+
+
+# ============================================================
+# Test
+# ============================================================
+
+if __name__ == "__main__":
+    result = get_panorama_source("Jama Masjid", "Jama Masjid, Old Delhi, Delhi, India")
+    print(result)
