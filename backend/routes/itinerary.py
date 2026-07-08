@@ -99,6 +99,8 @@ class ItineraryBlock(BaseModel):
     period: Literal["morning", "afternoon", "evening"]  # Simplified to only these three
     time_window: str  # e.g., "09:00–11:30"
     title: str
+    place_name: str  # Real, specific, geocodable place name, e.g. "Jama Masjid", "Baga Beach"
+    search_query: str
     activity_type: Literal["sightseeing", "culture", "food", "relaxation", 
                           "adventure", "shopping", "beach", "nature", 
                           "history", "art", "music", "sports"]  # Strict list
@@ -207,6 +209,30 @@ IMPORTANT INSTRUCTIONS:
 6. Balance activity types across days
 7. Consider realistic travel times between locations
 8. Align with the user's budget and comfort level
+9. EVERY block MUST include BOTH of these fields:
+
+- "place_name"
+  A short, human-friendly landmark name.
+  Examples:
+  - India Gate
+  - Jama Masjid
+  - Baga Beach
+
+- "search_query"
+  A fully-qualified location string suitable for map services.
+
+  Format:
+  "<place>, <city>, <state if needed>, <country>"
+
+Examples:
+
+place_name: "India Gate"
+search_query: "India Gate, New Delhi, Delhi, India"
+
+place_name: "Jama Masjid"
+search_query: "Jama Masjid, Old Delhi, Delhi, India"
+
+The search_query should uniquely identify the place so that map services can locate it accurately.
 
 ========================
 CRITICAL ENUM ENFORCEMENT (MANDATORY)
@@ -269,6 +295,8 @@ CRITICAL: You MUST use this exact JSON structure:
           "period": "morning",
           "time_window": "09:00–11:30",
           "title": "Welcome Activity",
+          "place_name": "India Gate",
+          "search_query": "India Gate, New Delhi, Delhi, India",
           "activity_type": "sightseeing",
           "description": "Start your trip with an introductory activity.",
           "logistics_hint": "Optional practical tip",
@@ -284,6 +312,8 @@ CRITICAL: You MUST use this exact JSON structure:
           "period": "afternoon",
           "time_window": "13:00–15:30",
           "title": "Cultural Experience",
+          "place_name": "Jama Masjid",
+          "search_query": "Jama Masjid, Old Delhi, Delhi, India",
           "activity_type": "culture",
           "description": "Explore local culture and traditions.",
           "logistics_hint": "Optional practical tip",
@@ -299,6 +329,8 @@ CRITICAL: You MUST use this exact JSON structure:
           "period": "evening",
           "time_window": "18:00–20:30",
           "title": "Evening Relaxation",
+          "place_name": "Lodhi Garden",
+          "search_query": "Lodhi Garden, New Delhi, Delhi, India",
           "activity_type": "relaxation",
           "description": "Wind down after a day of exploration.",
           "logistics_hint": "Optional practical tip",
@@ -452,9 +484,14 @@ def validate_itinerary_structure(data: dict, expected_days: int) -> bool:
             # Check each block structure
             for block in blocks:
                 # Required block fields
-                required_block_fields = ["period", "time_window", "title", 
-                                       "activity_type", "description"]
+                required_block_fields = ["period", "time_window", "title", "search_query",
+                                       "place_name", "activity_type", "description"]
                 if not all(field in block for field in required_block_fields):
+                    return False
+                
+                # place_name must be a non-empty, non-generic string
+                if not isinstance(block["place_name"], str) or not block["place_name"].strip():
+                    print(f"Invalid or missing place_name in block: {block.get('title')}")
                     return False
                 
                 # Validate period value (STRICT)
