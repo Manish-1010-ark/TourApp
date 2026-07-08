@@ -1,6 +1,6 @@
 import "./App.css";
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
-
+import ChatWidget from './components/ChatWidget';
 import Home from "./pages/Home.jsx";
 import ItineraryCreationPage from "./pages/extra/ItineraryPage.jsx";
 import TestItinerary from "./pages/test/TestItinerary.jsx";
@@ -44,6 +44,8 @@ function App() {
         <Route path="/test" element={<TestItinerary />} />
         <Route path="/validate" element={<RouteValidation />} />
       </Routes>
+
+      <ChatWidget />
     </Router>
   );
 }

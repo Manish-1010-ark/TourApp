@@ -7,7 +7,7 @@ from routes.route_validation import router as route_router
 from routes.travel_modes import router as travel_router
 from routes.trip_config import router as trip_config_router  # NEW: Module 5
 from routes.itinerary import router as itinerary_router     # Module 6
-from routes.chatbot import router as chatbot_router
+from routes.chatbot import router as chatbot_routerfrom routes.chatbot import router as chatbot_router
 from schemas.itinerary import ItineraryResponse
 from schemas.request import ItineraryRequest
 from services.gemini_service import generate_itinerary
@@ -26,8 +26,7 @@ app.include_router(route_router)         # Module 2: Route feasibility
 app.include_router(travel_router)        # Module 3: Travel modes
 app.include_router(trip_config_router)   # Module 5: Trip configuration (NEW)
 app.include_router(itinerary_router)     # Module 6: Itinerary generation
-app.include_router(chatbot_router)       # Module 7: Chatbot
-app.include_router(destination_router)  
+
 # ============================================================================
 # CORS MIDDLEWARE
 # ============================================================================
